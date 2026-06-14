@@ -41,11 +41,21 @@ A customer-demoable Phase 1 Proof of Concept, built inside the `aks-governance` 
   11. Allow-list = `mcr.microsoft.com` + the customer ACR + `registry.k8s.io` (so cluster add-ons keep working). (argocd question 4)
   12. Demo runs Audit → flip to Enforce for the before/after screenshot narrative. (argocd question 5)
 * Success Criteria:
-  * One `workflow_dispatch` run provisions the management cluster, both workload clusters, ArgoCD, Kyverno, and both policies.
-  * A bad Pod (`--image=nginx` and `--image=quay.io/...`) is **blocked** on workload clusters; a `mcr.microsoft.com/...` Pod **passes**.
-  * A workload-cluster definition with `spec.version` below the minimum is **rejected** on the management cluster.
-  * Wiki page is published with interleaved CLI evidence + ArgoCD/portal screenshots.
-  * Approval-gated teardown removes all Azure resources (verified `az group delete` + no orphaned workload RGs).
+  * A single `workflow_dispatch` run completes through capture with all non-teardown jobs green, or failed demo steps still upload diagnostic artifacts.
+  * The management AKS cluster has OIDC issuer and Workload Identity enabled, and CAPZ plus ASO controllers report Available.
+  * Exactly two CAPI `Cluster` objects reach Ready, and both generated AKS clusters are accessible with `clusterctl get kubeconfig`.
+  * ArgoCD has exactly two workload cluster Secrets labeled `type=workload`, and the governance ApplicationSet creates one healthy policy Application per workload cluster.
+  * In namespace `governance-demo`, `kubectl run denied-nginx --image=nginx` and a `quay.io` test image are rejected, while the selected `mcr.microsoft.com` test image is admitted.
+  * Applying an under-minimum `AzureASOManagedControlPlane` sample to the management cluster is rejected at admission with the configured minimum version in the error message.
+  * Capture artifacts include at least one CLI text file and one screenshot for management cluster health, ArgoCD sync state, registry-deny evidence, min-version denial, and teardown verification.
+  * Teardown first deletes CAPI workload `Cluster` objects, waits until workload resource groups are gone, and only then deletes `rg-aksgov-poc-mgmt`.
+
+### Evidence Classification
+
+* Verified in `aks-governance`: the repo is documentation-only today; `README.md` positions single subscription as a tactical bootstrap and multi-subscription ODS as the strategic destination; AKS governance is distinct from ARO/Arc governance; ArgoCD plus CAPZ/ASO is the AKS lifecycle and GitOps pattern.
+* Verified in sibling `aks-fleet-manager`: the deploy, demo, capture, publish-wiki, and approval-gated teardown harness exists and is reusable as a delivery pattern.
+* Phase 1 design decisions introduced by this research: GitHub Actions for `aks-governance`, two workload AKS clusters, Kyverno as primary admission policy engine, management AKS rather than kind, ArgoCD ApplicationSet fan-out, and wiki proof as the customer-demo deliverable.
+* Not yet verified: CAPZ bundled ASO version, exact `aks-aso` template API versions, ASO/CAPZ service account names for Workload Identity, current AKS supported versions in target regions, GitHub wiki availability, and binary asset roadmap alignment.
 
 ## Outline
 
@@ -83,6 +93,21 @@ A customer-demoable Phase 1 Proof of Concept, built inside the `aks-governance` 
 * Confirm a wiki publish target exists for `devopsabcs-engineering/aks-governance` (GitHub wiki enabled, or ADO project wiki).
   * Reasoning: `publish-wiki.ps1` needs a real target + `WIKI_PAT`.
   * Reference: .copilot-tracking/research/subagents/2026-06-14/repos-analysis-research.md wiki section.
+* Add Azure preflight checks before provisioning: provider registration, regional VM SKU availability, AKS supported versions, public IP quota, and core quota.
+  * Reasoning: the PoC creates three AKS clusters in one subscription; quota or SKU failures can otherwise surface only after long-running provisioning begins.
+  * Reference: .copilot-tracking/research/subagents/2026-06-14/phase-1-capi-aks-governance-poc-rubber-duck.md improvement opportunities.
+
+### Implementation Risk Register
+
+| Risk | Impact | Mitigation |
+| --- | --- | --- |
+| CAPZ/ASO API versions drift | Generated manifests fail to apply or CR paths differ from policy assumptions | Fetch or validate `cluster-template-aks-aso.yaml` during implementation and pin known-good versions in the repo |
+| AKS version unavailable in selected region | Workload cluster creation fails late in the pipeline | Run `az aks get-versions -l <region>` before provisioning and select a supported patch version |
+| ArgoCD cluster registration incomplete | Policies never reach workload clusters | Implement and test kubeconfig-to-ArgoCD-Secret conversion before policy fan-out; fail fast if two cluster Secrets are not present |
+| Registry deny policy blocks add-ons | System add-ons or demo dependencies fail to pull images | Run the denial proof in `governance-demo`, include known allowed registries, and document any namespace exclusions deliberately |
+| Management cluster destroyed first | Workload AKS clusters can orphan and continue billing | Teardown script must delete CAPI `Cluster` objects, wait for workload RG deletion, then delete the management RG |
+| Wiki target or PAT missing | Customer proof is captured but not published | Add a publish preflight for GitHub wiki or ADO wiki target and token scope before the wiki job |
+| Subscription quota or SKU limits | Pipeline fails after long provisioning time | Add preflight checks for provider registration, VM SKU availability, regional cores, public IP quota, and identity/RBAC permissions |
 
 ## Research Executed
 
@@ -303,6 +328,12 @@ A single GitHub Actions `workflow_dispatch` pipeline provisions an ephemeral man
 * **Kyverno** primary policy engine (readable YAML, registry-aware image parsing, semver operators, instant Audit⇄Enforce toggle); Gatekeeper + Azure Policy presented as alternatives for the customer.
 * **Teardown ordering is mandatory**: `kubectl delete cluster poc-aks-1 poc-aks-2` first (cascades CAPI→CAPZ→ASO→Azure RG deletion of the workload clusters), wait for their RGs to disappear, then `az group delete` the management RG. Destroying the management cluster first orphans the workload AKS clusters (they keep billing).
 
+#### Management Cluster Decision Record
+
+The CAPI quick-start path favors kind because it is fully ephemeral and low cost. This PoC selects an ephemeral AKS management cluster instead for three reasons: AKS provides a native OIDC issuer for Workload Identity, ArgoCD can be captured through a stable live endpoint during the customer demo, and the approach better matches the README's Azure-native ODS direction. The tradeoff is higher runtime cost and longer bootstrap time per pipeline run. The pipeline must therefore include quota checks, explicit teardown ordering, and a manual approval gate before resource deletion.
+
+Option B remains kind. Use it only if cost is prioritized over live ArgoCD screenshots and Workload Identity simplicity, and document the added JWKS/OIDC bootstrap work.
+
 ```text
 aks-governance/
 ├─ .github/
@@ -362,6 +393,21 @@ flowchart TD
 * Example A delivered to workload clusters via the ApplicationSet cluster generator (`matchLabels: {type: workload}`), naturally excluding the management cluster. Example B applied directly on the management cluster (validates CAPZ CRs).
 * Demo narrative: deploy policies as `Audit` first (`kubectl get policyreport -A` shows violations without blocking), capture screenshot, then a git commit flips to `Enforce`, ArgoCD self-heals, re-apply bad Pod → blocked → capture the denial.
 * Allow-list MCR + ACR + `registry.k8s.io` so cluster add-ons (cert-manager, ingress) keep pulling.
+
+### Implementation Readiness Matrix
+
+| Capability | Build artifact | Validation command | Expected evidence |
+| --- | --- | --- | --- |
+| Azure prerequisites | `scripts/preflight.ps1` | `az provider show`, `az aks get-versions`, `az vm list-skus`, quota checks | Required providers registered; selected regions, versions, SKUs, and quotas are usable |
+| Management AKS | `infra/mgmt-cluster.bicep`, `scripts/deploy-mgmt.ps1` | `az aks show -g rg-aksgov-poc-mgmt -n <mgmtName>` | AKS exists, OIDC issuer enabled, Workload Identity enabled |
+| CAPI/CAPZ/ASO controllers | `scripts/deploy-mgmt.ps1` | `kubectl get deployments -n capz-system` and `kubectl get crd azureasomanagedcontrolplanes.infrastructure.cluster.x-k8s.io` | Controllers Available and CRDs served |
+| Workload clusters | `clusters/*.env`, `scripts/provision-clusters.ps1` | `kubectl get clusters -A` and `clusterctl describe cluster <name>` | Both clusters Ready, kubeconfig secrets present |
+| ArgoCD registration | `scripts/register-argocd-clusters.ps1` or Kubernetes Job | `kubectl get secret -n argocd -l argocd.argoproj.io/secret-type=cluster,type=workload` | Two workload cluster Secrets with reachable API servers |
+| Policy fan-out | `gitops/apps/governance-policies.yaml` | `argocd app list` and `kubectl --context <workload> get clusterpolicy` | One policy Application per workload cluster is Synced and Healthy |
+| Registry deny | `gitops/policies/kyverno/block-docker-quay-registries.yaml` | `kubectl run denied-nginx --image=nginx -n governance-demo` | Admission denial mentions `docker.io` or blocked registry |
+| Minimum version | `gitops/policies/kyverno/enforce-min-k8s-version.yaml`, `samples/under-min-version.yaml` | `kubectl apply -f samples/under-min-version.yaml` | Admission denial mentions the configured minimum Kubernetes version |
+| Evidence capture | `scripts/capture.ps1`, `docs/capture-argocd.ts` | workflow artifacts and generated wiki markdown | CLI text and screenshots exist for each success criterion |
+| Teardown | `scripts/teardown.ps1` | `kubectl delete cluster <name>` then `az group show -n <workloadRg>` | Workload RGs deleted before management RG deletion |
 
 ```yaml
 # gitops/apps/governance-policies.yaml — fan policies to every workload cluster
