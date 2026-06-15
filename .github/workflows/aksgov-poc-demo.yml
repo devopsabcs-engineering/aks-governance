@@ -122,9 +122,15 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          # Lets ArgoCD authenticate to this (potentially private) repo for the app-of-apps
-          # source, so the root Application syncs instead of sitting in 'Unknown' (WI-07).
-          ARGOCD_GIT_TOKEN: ${{ github.token }}
+          # Lets ArgoCD authenticate to this (potentially private/internal) repo for the
+          # app-of-apps source, so the root Application syncs instead of sitting in
+          # 'Unknown' (WI-07). Prefer a durable credential (secrets.ARGOCD_GIT_PAT, e.g. a
+          # fine-grained PAT or GitHub App token with read-only Contents on this repo):
+          # the ephemeral github.token is REVOKED when the job ends, so ArgoCD can no
+          # longer pull afterward and the GitOps fan-out (ApplicationSets) never reconciles.
+          # Falls back to github.token (works only for the life of this job) when the
+          # secret is unset, so existing setups keep working.
+          ARGOCD_GIT_TOKEN: ${{ secrets.ARGOCD_GIT_PAT || github.token }}
         run: |
           pwsh -File scripts/deploy-mgmt.ps1 \
             -ResourceGroup '${{ inputs.resourceGroup }}' \
@@ -247,7 +253,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: captures-registry
-          path: docs/captures/
+          # Upload ONLY this demo's own capture files. Uploading the whole
+          # docs/captures/ dir would also bundle the checked-out (stale, committed)
+          # copies of the other demo's files, which then clobber the fresh captures
+          # when both artifacts are downloaded into the same dir in the capture job.
+          path: docs/captures/demo-registry-*.txt
           if-no-files-found: warn
 
   demo-min-version:
@@ -281,7 +291,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: captures-min-version
-          path: docs/captures/
+          # Upload ONLY this demo's own capture file (see the Example A note above).
+          path: docs/captures/demo-min-version.txt
           if-no-files-found: warn
 
   capture:

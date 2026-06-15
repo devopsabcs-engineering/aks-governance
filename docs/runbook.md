@@ -53,6 +53,7 @@ Configure these under repo **Settings -> Secrets and variables -> Actions**:
 | `AZURE_TENANT_ID` | Microsoft Entra tenant ID. |
 | `AZURE_SUBSCRIPTION_ID` | Target subscription for all PoC resources. |
 | `WIKI_PAT` | GitHub PAT with **Code (Read & write)** scope for wiki publish (only needed when `publishWiki` is true). |
+| `ARGOCD_GIT_PAT` | _Optional but recommended for internal/private repos._ Durable git credential (fine-grained PAT or GitHub App token with **Contents: Read-only** on this repo) seeded into ArgoCD so the app-of-apps root Application can keep pulling after the workflow ends. Without it the pipeline falls back to the ephemeral `github.token`, which is revoked when the job finishes — so ArgoCD's root app sits in `Unknown` and the GitOps fan-out (ApplicationSets) never reconciles policies onto the workload clusters. |
 
 The pipeline authenticates to Azure with `azure/login@v2` using OIDC (federated
 credentials) — no client secret is stored.
