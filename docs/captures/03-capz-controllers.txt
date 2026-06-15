@@ -1,0 +1,4 @@
+NAME                                                       READY   STATUS    RESTARTS   AGE    IP            NODE                                 NOMINATED NODE   READINESS GATES
+azureserviceoperator-controller-manager-6f65c58bdb-bszv6   1/1     Running   0          139m   10.224.0.39   aks-systempool-92469914-vmss000000   <none>           <none>
+azureserviceoperator-controller-manager-6f65c58bdb-jmdwh   1/1     Running   0          139m   10.224.0.25   aks-systempool-92469914-vmss000001   <none>           <none>
+capz-controller-manager-6957f87fb5-4nhrh                   1/1     Running   0          140m   10.224.0.27   aks-systempool-92469914-vmss000001   <none>           <none>

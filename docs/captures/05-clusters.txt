@@ -1,0 +1,3 @@
+NAMESPACE   NAME        CLUSTERCLASS   AVAILABLE   CP DESIRED   CP CURRENT   CP READY   CP AVAILABLE   CP UP-TO-DATE   W DESIRED   W CURRENT   W READY   W AVAILABLE   W UP-TO-DATE   PAUSED   PHASE         AGE    VERSION
+default     poc-aks-1                  True                                                                                                                                           False    Provisioned   134m   
+default     poc-aks-2                  True                                                                                                                                           False    Provisioned   69m    

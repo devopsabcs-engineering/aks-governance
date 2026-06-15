@@ -57,86 +57,86 @@ Author a greenfield, customer-demoable Phase 1 PoC in `aks-governance` that mirr
 
 ## Implementation Checklist
 
-### [ ] Implementation Phase 1: Repo Scaffolding and Azure Preflight
+### [x] Implementation Phase 1: Repo Scaffolding and Azure Preflight
 
 <!-- parallelizable: true -->
 
-* [ ] Step 1.1: Create repo directory tree and placeholder structure
+* [x] Step 1.1: Create repo directory tree and placeholder structure
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 16-37)
-* [ ] Step 1.2: Author `scripts/preflight.ps1` Azure prerequisite checks
+* [x] Step 1.2: Author `scripts/preflight.ps1` Azure prerequisite checks
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 38-59)
 
-### [ ] Implementation Phase 2: Management Cluster Infra and Bootstrap
+### [x] Implementation Phase 2: Management Cluster Infra and Bootstrap
 
 <!-- parallelizable: true -->
 
-* [ ] Step 2.1: Author `infra/mgmt-cluster.bicep` (ephemeral AKS + UAMI + federated creds + OIDC/Workload Identity)
+* [x] Step 2.1: Author `infra/mgmt-cluster.bicep` (ephemeral AKS + UAMI + federated creds + OIDC/Workload Identity)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 62-81)
-* [ ] Step 2.2: Author `scripts/deploy-mgmt.ps1` (deploy Bicep, get-credentials, `clusterctl init`, ASO creds Secret, ArgoCD + Kyverno bootstrap)
+* [x] Step 2.2: Author `scripts/deploy-mgmt.ps1` (deploy Bicep, get-credentials, `clusterctl init`, ASO creds Secret, ArgoCD + Kyverno bootstrap)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 82-103)
 
-### [ ] Implementation Phase 3: Workload Cluster Provisioning (CAPZ aks-aso)
+### [x] Implementation Phase 3: Workload Cluster Provisioning (CAPZ aks-aso)
 
 <!-- parallelizable: true -->
 
-* [ ] Step 3.1: Author per-cluster `.env` inputs and checked-in `cluster-template-aks-aso.yaml`
+* [x] Step 3.1: Author per-cluster `.env` inputs and checked-in `cluster-template-aks-aso.yaml`
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 106-128)
-* [ ] Step 3.2: Author `scripts/provision-clusters.ps1` (loop `.env` → `clusterctl generate` → apply → wait → get kubeconfig)
+* [x] Step 3.2: Author `scripts/provision-clusters.ps1` (loop `.env` → `clusterctl generate` → apply → wait → get kubeconfig)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 129-146)
 
-### [ ] Implementation Phase 4: ArgoCD Registration and GitOps Fan-Out
+### [x] Implementation Phase 4: ArgoCD Registration and GitOps Fan-Out
 
 <!-- parallelizable: true -->
 
-* [ ] Step 4.1: Author `gitops/bootstrap/root-app.yaml` and `gitops/apps/{kyverno.yaml,governance-policies.yaml}`
+* [x] Step 4.1: Author `gitops/bootstrap/root-app.yaml` and `gitops/apps/{kyverno.yaml,governance-policies.yaml}`
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 149-167)
-* [ ] Step 4.2: Author `scripts/register-argocd-clusters.ps1` (kubeconfig → ArgoCD cluster Secret labeled `type=workload`)
+* [x] Step 4.2: Author `scripts/register-argocd-clusters.ps1` (kubeconfig → ArgoCD cluster Secret labeled `type=workload`)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 168-189)
 
-### [ ] Implementation Phase 5: Governance Policies and Demo Scripts
+### [x] Implementation Phase 5: Governance Policies and Demo Scripts
 
 <!-- parallelizable: true -->
 
-* [ ] Step 5.1: Author Kyverno policies and the under-min sample manifest
+* [x] Step 5.1: Author Kyverno policies and the under-min sample manifest
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 192-214)
-* [ ] Step 5.2: Author `scripts/demo-registry.ps1` (Example A) and `scripts/demo-min-version.ps1` (Example B)
+* [x] Step 5.2: Author `scripts/demo-registry.ps1` (Example A) and `scripts/demo-min-version.ps1` (Example B)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 215-233)
 
-### [ ] Implementation Phase 6: Evidence Capture and Wiki Publishing
+### [x] Implementation Phase 6: Evidence Capture and Wiki Publishing
 
 <!-- parallelizable: true -->
 
-* [ ] Step 6.1: Adapt `scripts/capture.ps1` + author `docs/capture-argocd.ts` (CLI text + ArgoCD/portal screenshots)
+* [x] Step 6.1: Adapt `scripts/capture.ps1` + author `docs/capture-argocd.ts` (CLI text + ArgoCD/portal screenshots)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 236-253)
-* [ ] Step 6.2: Reuse `scripts/publish-wiki.ps1` from sibling and add a publish preflight
+* [x] Step 6.2: Reuse `scripts/publish-wiki.ps1` from sibling and add a publish preflight
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 254-278)
 
-### [ ] Implementation Phase 7: Cost-Safe Teardown
+### [x] Implementation Phase 7: Cost-Safe Teardown
 
 <!-- parallelizable: true -->
 
-* [ ] Step 7.1: Author `scripts/teardown.ps1` with CAPI-ordered deletion
+* [x] Step 7.1: Author `scripts/teardown.ps1` with CAPI-ordered deletion
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 279-300)
 
-### [ ] Implementation Phase 8: Pipeline Orchestration
+### [x] Implementation Phase 8: Pipeline Orchestration
 
 <!-- parallelizable: false -->
 
-* [ ] Step 8.1: Author `.github/workflows/aksgov-poc-demo.yml` wiring all jobs (deploy → bootstrap → provision → demo-A → demo-B → capture → publish-wiki → approval-gated teardown)
+* [x] Step 8.1: Author `.github/workflows/aksgov-poc-demo.yml` wiring all jobs (deploy → bootstrap → provision → demo-A → demo-B → capture → publish-wiki → approval-gated teardown)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 303-319)
-* [ ] Step 8.2: Author README/runbook for the PoC (inputs, secrets, GitHub Environment, demo narrative)
+* [x] Step 8.2: Author README/runbook for the PoC (inputs, secrets, GitHub Environment, demo narrative)
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 320-337)
 
-### [ ] Implementation Phase 9: Validation
+### [x] Implementation Phase 9: Validation
 
 <!-- parallelizable: false -->
 
-* [ ] Step 9.1: Run static validation on all authored artifacts
+* [x] Step 9.1: Run static validation on all authored artifacts
   * Run `az bicep build --file infra/mgmt-cluster.bicep`, `pwsh -NoProfile -Command "..."` syntax parse of every `scripts/*.ps1`, `kubectl apply --dry-run=client -f` on every YAML manifest, and `actionlint`/`yamllint` on the workflow
   * Details: .copilot-tracking/details/2026-06-14/phase-1-capi-aks-governance-poc-details.md (Lines 340-356)
-* [ ] Step 9.2: Fix minor validation issues
+* [x] Step 9.2: Fix minor validation issues
   * Iterate on lint errors, Bicep warnings, and YAML schema issues; apply straightforward corrections directly
-* [ ] Step 9.3: Report blocking issues
+* [x] Step 9.3: Report blocking issues
   * Document any failures requiring live-cluster validation or additional research (e.g., CAPZ/ASO API version drift, region-valid AKS version) and provide next steps rather than large-scale inline fixes
 
 ## Planning Log

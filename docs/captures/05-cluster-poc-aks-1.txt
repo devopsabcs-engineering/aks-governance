@@ -1,0 +1,6 @@
+NAME                                                        REPLICAS AVAILABLE READY UP TO DATE STATUS REASON     SINCE MESSAGE 
+Cluster/poc-aks-1                                                                               True   Available  129m          
+Γö£ΓöÇClusterInfrastructure - AzureASOManagedCluster/poc-aks-1                                                                      
+Γö£ΓöÇControlPlane - AzureASOManagedControlPlane/poc-aks-1                                                                          
+ΓööΓöÇWorkers                                                                                                                       
+  ΓööΓöÇMachinePool/poc-aks-1-pool0                                                                                                 

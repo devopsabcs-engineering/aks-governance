@@ -1,0 +1,6 @@
+NAME                 SYNC STATUS   HEALTH STATUS   REVISION                                   PROJECT
+kyverno-poc-aks-1    OutOfSync     Healthy         3.8.1                                      default
+kyverno-poc-aks-2    OutOfSync     Healthy         3.8.1                                      default
+policies-poc-aks-1   OutOfSync     Healthy         8ae934e7f112922ae5e8a51b5979b2c29f0f6867   default
+policies-poc-aks-2   OutOfSync     Healthy         8ae934e7f112922ae5e8a51b5979b2c29f0f6867   default
+root                 Synced        Healthy         8ae934e7f112922ae5e8a51b5979b2c29f0f6867   default

@@ -1,0 +1,14 @@
+# AKS governance PoC teardown - 2026-06-14T21:18:43.9369796-04:00
+==> Discovering workload clusters from 'C:\src\GitHub\devopsabcs-engineering\aks-governance\clusters'...
+    cluster 'poc-aks-1' (from poc-aks-1.env) -> workload RG 'poc-aks-1'
+    cluster 'poc-aks-2' (from poc-aks-2.env) -> workload RG 'poc-aks-2'
+==> Management RG (deleted LAST): 'rg-aksgov-poc-mgmt'
+==> [1/3] Deleting CAPI Cluster objects: poc-aks-1, poc-aks-2
+    CAPI Cluster delete issued (cascades CAPZ -> ASO -> Azure RG deletion).
+==> [2/3] Waiting up to 45m for workload RGs to be deleted: poc-aks-1, poc-aks-2
+    workload RG 'poc-aks-1' is gone.
+    workload RG 'poc-aks-2' is gone.
+    All workload RGs confirmed deleted.
+==> [3/3] Deleting management RG 'rg-aksgov-poc-mgmt' (background, --no-wait)...
+==> Teardown ordering complete. Verification captured to 'C:\src\GitHub\devopsabcs-engineering\aks-governance\docs\captures\teardown.txt'.
+    Workload RGs deleted before management RG deletion was issued.

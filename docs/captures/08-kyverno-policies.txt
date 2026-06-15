@@ -1,0 +1,3 @@
+NAME                           ADMISSION   BACKGROUND   READY   AGE    FAILURE POLICY   VALIDATE   MUTATE   GENERATE   VERIFY IMAGES   MESSAGE
+block-docker-quay-registries   true        true         True    150m                    1          0        0          0               Ready
+enforce-min-k8s-version        true        false        True    148m                    1          0        0          0               Ready

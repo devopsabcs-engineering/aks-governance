@@ -1,0 +1,3 @@
+NAME        TYPE     DATA   AGE
+poc-aks-1   Opaque   3      6m24s
+poc-aks-2   Opaque   3      6m23s

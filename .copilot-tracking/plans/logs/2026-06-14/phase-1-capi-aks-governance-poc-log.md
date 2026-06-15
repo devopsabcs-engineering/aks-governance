@@ -59,6 +59,26 @@ Gaps and differences identified between research findings and the implementation
   * Plan implements: Phase 5 Step 5.1 validates schema at build time.
   * Rationale: Kyverno 1.12+ changed the failure-action location; policies must match the deployed chart.
 
+### Live Implementation Resolutions (2026-06-14 execution)
+
+Discrepancies resolved during live execution against `ME-MngEnvMCAP675646-emknafo-1`.
+
+* DR-01 RESOLVED: CAPZ v1.24.1 bundles ASO in namespace `capz-system` with SA `azureserviceoperator-default` and global credential Secret `aso-controller-settings`. Cluster CRD is `cluster.x-k8s.io/v1beta2` (storage) / `v1beta1` (served, deprecated). The Workload Identity webhook objectSelector matches POD labels, not SA labels.
+* DR-03 RESOLVED: the kubeconfig->ArgoCD cluster-Secret automation (`scripts/register-argocd-clusters.ps1`, Path B cert-based) works end-to-end; both `type=workload` Secrets created and the governance ApplicationSet fanned policies to both workload clusters (Ready=True).
+* DR-04 RESOLVED: `AzureASOManagedControlPlane.spec.version` is the correct min-version JSON path; the policy denies an under-min CR naming the v1.28.0 minimum.
+* DR-05/DD-04 RESOLVED: Kyverno chart 3.8.1 (app v1.18.1) accepts the policy-level `spec.validationFailureAction` (deprecated-but-supported), enabling the clean Audit->Enforce demo narrative.
+
+* DD-05: clusterctl pinned to >= v1.13.2 (upgraded from v1.8.5 live).
+  * Reason: clusterctl v1.8.5 installs CAPI core v1.10.x (v1beta1-only) but CAPZ v1.24.1 requires CAPI v1beta2 (core v1.11+); the version mismatch crash-looped capz-controller-manager. Follow-on WI-06 pins this in scripts/install-tools.ps1.
+* DD-06: scripts/provision-clusters.ps1 pipes the template via stdin (`clusterctl generate cluster --from -`) instead of an absolute path.
+  * Reason: clusterctl v1.13+ parses `--from` as a URL first and misreads Windows absolute paths (`C:\...`) as URL schemes.
+* DD-07: scripts/provision-clusters.ps1 waits on the CAPI `Available` condition (with `Ready` fallback).
+  * Reason: CAPI v1beta2 renamed the top-level Cluster health condition from `Ready` to `Available`; the old jsonpath timed out at 40m on a healthy cluster.
+* DD-08: gitops/apps/kyverno.yaml converted from Pattern 1 (single in-cluster Application, chart 3.2.6) to Pattern 2 (ApplicationSet per `type=workload` cluster, chart 3.8.1).
+  * Reason: Pattern 1 would downgrade/fight the Helm-managed mgmt Kyverno and leave workload clusters with no engine for the fanned policies; Pattern 2 installs Kyverno where admission control runs.
+* DD-09: gitops/policies/kyverno/enforce-min-k8s-version.yaml strips the `v` prefix before the Kyverno `LessThan` comparison.
+  * Reason: Kyverno's `LessThan` cannot parse `v`-prefixed semver; without stripping, under-min control planes were silently ADMITTED.
+
 ## Implementation Paths Considered
 
 ### Selected: Ephemeral AKS management cluster + CAPZ aks-aso + ArgoCD + Kyverno, single subscription
@@ -110,6 +130,12 @@ Items identified during planning that fall outside current scope.
 * WI-05: Add kind management-cluster mode as a pipeline input toggle (cost-optimized variant from IP-01). (low)
   * Source: IP-01.
   * Dependency: Phase 1 PoC complete.
+* WI-06: Pin `clusterctl >= v1.13.2` in scripts/install-tools.ps1 (and document the CAPI-core/CAPZ version contract) so a fresh runner never installs a v1beta1-only clusterctl against CAPZ v1.24.1. (medium)
+  * Source: DD-05 live fix.
+  * Dependency: none.
+* WI-07: Provision the ArgoCD `repository` credential Secret in the pipeline before applying the root-app, since the repo is private (ArgoCD fails `Repository not found` without git creds). Source it from a repo secret (e.g. reuse `WIKI_PAT` or add `GH_TOKEN`). (high)
+  * Source: live ArgoCD repo-auth finding.
+  * Dependency: GitHub Actions OIDC wiring (done).
 
 ## User Decisions
 
@@ -120,3 +146,10 @@ Decisions recorded from Implementation Decision prompts.
 * ID-01: Execution path — run end-to-end **locally first** against the current `az login`, then wire GitHub Actions OIDC.
   * Rationale: fastest iteration; avoids org-admin dependency for the first green run.
 * ID-02: Identity + cost authorization — user authorized creating app registrations + role assignments and running teardown at the end.
+
+### Live decisions (2026-06-14 execution)
+
+* ID-03: GitHub Actions OIDC identity — created app registration `aksgov-poc-oidc` (appId `dc9cd1c1-c7d5-4fc0-a0da-2280044721f3`, SP objectId `22eda909-c952-4549-a84c-d5455bef8cfe`) with subscription-scope **Owner**, federated credentials for `ref:refs/heads/main` and `environment:aksgov-poc-teardown`, repo secrets `AZURE_CLIENT_ID`/`AZURE_TENANT_ID`/`AZURE_SUBSCRIPTION_ID`, and the `aksgov-poc-teardown` environment (reviewer `emmanuelknafo`). `WIKI_PAT` left for the operator (manual PAT; only needed when `publishWiki=true`).
+  * Rationale: matches the runbook OIDC recipe; Owner mirrors the local run's permission level (UAMI + role-assignment creation for ASO WI).
+* ID-04: Skipped a duplicate live pipeline run. Every job the workflow orchestrates was proven live locally (preflight, deploy-mgmt, provision, register-argocd, demo-registry, demo-min-version, capture). A `workflow_dispatch` run would provision a parallel mgmt + 2 workload clusters (doubling cost) with no additional coverage; the workflow was validated statically with actionlint instead.
+  * Rationale: cost safety + no added coverage; the pipeline is wired and runnable on demand.

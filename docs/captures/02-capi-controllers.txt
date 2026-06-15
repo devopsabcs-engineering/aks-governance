@@ -1,0 +1,2 @@
+NAME                                       READY   STATUS    RESTARTS   AGE    IP            NODE                                 NOMINATED NODE   READINESS GATES
+capi-controller-manager-8656648b89-n79l8   1/1     Running   0          140m   10.224.0.37   aks-systempool-92469914-vmss000000   <none>           <none>

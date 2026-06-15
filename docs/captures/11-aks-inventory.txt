@@ -1,0 +1,5 @@
+Name             ResourceGroup       KubernetesVersion    ProvisioningState    PowerState
+---------------  ------------------  -------------------  -------------------  ------------
+aksgov-poc-mgmt  rg-aksgov-poc-mgmt  1.34.8               Succeeded            Running
+poc-aks-1        poc-aks-1           1.34.8               Succeeded            Running
+poc-aks-2        poc-aks-2           1.34.8               Updating             Running

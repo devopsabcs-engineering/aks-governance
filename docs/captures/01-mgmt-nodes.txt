@@ -1,0 +1,3 @@
+NAME                                 STATUS   ROLES    AGE    VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION      CONTAINER-RUNTIME
+aks-systempool-92469914-vmss000000   Ready    <none>   171m   v1.34.8   10.224.0.33   <none>        Ubuntu 22.04.5 LTS   5.15.0-1111-azure   containerd://1.7.32-1
+aks-systempool-92469914-vmss000001   Ready    <none>   171m   v1.34.8   10.224.0.4    <none>        Ubuntu 22.04.5 LTS   5.15.0-1111-azure   containerd://1.7.32-1
