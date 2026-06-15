@@ -163,8 +163,10 @@ function New-DemoMarkdown {
         '09-policy-reports'       = '`kubectl get policyreport -A` - the Audit-phase violation report. The demo deploys policies as `Audit` first (violations visible but not blocked), captures this report, then a git commit flips them to `Enforce`.'
         '10-mgmt-aks'             = '`az aks show` - the management AKS cluster with its OIDC issuer and workload-identity flags, confirming the identity wiring CAPZ/ASO depend on.'
         '11-aks-inventory'        = '`az aks list` - the live AKS inventory across the subscription (management + both CAPZ-provisioned workload clusters) with their Kubernetes versions.'
-        'registry-deny'          = '**Example A - registry governance.** Applying a Pod that pulls from `docker.io` / `quay.io` is rejected at admission by Kyverno with the disallowed-registry message; an allow-listed `mcr.microsoft.com` image is admitted.'
-        'min-version-denial'     = '**Example B - minimum Kubernetes version.** Applying an under-minimum `AzureASOManagedControlPlane` is rejected at admission, with the configured minimum version echoed in the error message.'
+        'demo-registry-docker-io' = '**Example A - registry governance (deny).** A Pod pulling from `docker.io` is rejected at admission by the Kyverno `block-docker-quay-registries` policy under Enforce (and reported, not blocked, under Audit). See the capture header for the expected vs observed result.'
+        'demo-registry-quay-io'  = '**Example A - registry governance (deny).** A Pod pulling from `quay.io` is likewise rejected at admission by the same Kyverno policy under Enforce (reported under Audit).'
+        'demo-registry-mcr-microsoft-com' = '**Example A - registry governance (allow).** An allow-listed `mcr.microsoft.com` image is admitted, proving the policy denies only disallowed registries.'
+        'demo-min-version'       = '**Example B - minimum Kubernetes version.** Applying an under-minimum `AzureASOManagedControlPlane` is rejected at admission by the Kyverno `enforce-min-k8s-version` policy, with the configured minimum version echoed in the error message.'
         'teardown'               = '`scripts/teardown.ps1` - CAPI-ordered teardown: delete the `Cluster` objects, wait for the workload resource groups to drain, then delete the management resource group so no Azure cost is left behind.'
     }
 
@@ -175,7 +177,8 @@ function New-DemoMarkdown {
         '06-argocd-applications', '06-argocd-applicationsets', '07-argocd-clusters',
         '08-kyverno-policies', '09-policy-reports',
         '10-mgmt-aks', '11-aks-inventory',
-        'registry-deny', 'min-version-denial', 'teardown'
+        'demo-registry-docker-io', 'demo-registry-quay-io', 'demo-registry-mcr-microsoft-com',
+        'demo-min-version', 'teardown'
     )
     # Per-workload-cluster describe sections (05-cluster-<name>.txt).
     $allClusterKeys = @($capturesByKey.Keys + $imagesByKey.Keys) | Where-Object { $_ -match '^05-cluster-' } | Sort-Object -Unique

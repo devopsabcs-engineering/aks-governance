@@ -52,6 +52,22 @@ function Invoke-Kubectl {
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = $text.TrimEnd() }
 }
 
+# Strips noise unrelated to the governance control this demo exercises so the published
+# wiki shows only the Kyverno admission result. Removes Kubernetes API-deprecation
+# warnings (for example the cluster.x-k8s.io/v1beta1 Cluster deprecation notice) and any
+# AKS Azure Policy add-on ValidatingAdmissionPolicy warnings. Denial detection runs on the
+# raw text below, so filtering here is purely cosmetic for the evidence file.
+function Remove-CaptureNoise {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $kept = foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -match 'Validation failed for ValidatingAdmissionPolicy') { continue }
+        if ($line -match 'is deprecated; use ') { continue }
+        $line
+    }
+    return (($kept -join [Environment]::NewLine)).Trim()
+}
+
 if (-not (Test-Path -LiteralPath $SamplePath)) {
     throw "Sample manifest not found: $SamplePath"
 }
@@ -71,19 +87,35 @@ $mentionsMin = [bool]($result.Text | Select-String -Pattern ([regex]::Escape($Mi
 $pass = $denied -and $mentionsMin
 
 $capturePath = Join-Path $CaptureDir 'demo-min-version.txt'
-$header = @(
+$cleanText = Remove-CaptureNoise -Text $result.Text
+$elided = ($result.Text | Select-String -Pattern 'is deprecated; use |Validation failed for ValidatingAdmissionPolicy' -Quiet)
+$headerLines = @(
     "# Demo: minimum Kubernetes version guardrail"
     "# Sample: $SamplePath"
     "# Expected: REJECTED, message mentions $MinVersion"
     "# Observed denied: $denied"
     "# Observed mentions-min-version: $mentionsMin"
     "# kubectl exit code: $($result.ExitCode)"
-    "# ---"
-) -join [Environment]::NewLine
-($header + [Environment]::NewLine + $result.Text) |
+)
+if ($elided) {
+    $headerLines += '# Note: unrelated API-deprecation / Azure Policy add-on warnings elided for clarity.'
+}
+$headerLines += '# ---'
+$header = $headerLines -join [Environment]::NewLine
+($header + [Environment]::NewLine + $cleanText) |
     Tee-Object -FilePath $capturePath | Out-Null
 
 Write-Host ("Capture written: {0}" -f $capturePath)
+
+# Best-effort cleanup: only the under-minimum AzureASOManagedControlPlane is denied by the
+# policy; the sibling Cluster (and AzureASOManagedCluster) in the same manifest ARE admitted
+# and otherwise linger as a stuck 'Provisioning' object that pollutes the later
+# 'kubectl get clusters -A' evidence. Delete whatever the sample created so the captured
+# inventory shows only the two real workload clusters.
+Write-Host 'Cleaning up under-min-demo resources (best-effort)...' -ForegroundColor Cyan
+(& kubectl delete -f $SamplePath --ignore-not-found --wait=false 2>&1 | Out-String) |
+    ForEach-Object { if ($_.Trim()) { Write-Host "  $($_.Trim())" } }
+
 Write-Host ''
 Write-Host 'Summary:' -ForegroundColor Cyan
 $denyColor = if ($denied) { 'Green' } else { 'Red' }

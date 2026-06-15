@@ -67,6 +67,22 @@ function Invoke-Kubectl {
     return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = $text.TrimEnd() }
 }
 
+# Strips noise that is unrelated to the governance control this demo exercises so the
+# published wiki shows only the Kyverno admission result. Removes warnings emitted by the
+# AKS Azure Policy add-on (ValidatingAdmissionPolicy / 'default-k8s-misconfiguration-policy-*'
+# bindings) and Kubernetes API-deprecation warnings. Admission detection runs on the raw
+# text (see Invoke-Case), so filtering here is purely cosmetic for the evidence file.
+function Remove-CaptureNoise {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    $kept = foreach ($line in ($Text -split "`r?`n")) {
+        if ($line -match 'Validation failed for ValidatingAdmissionPolicy') { continue }
+        if ($line -match 'is deprecated; use ') { continue }
+        $line
+    }
+    return (($kept -join [Environment]::NewLine)).Trim()
+}
+
 # Applies one Pod manifest, writes the captured CLI text to the capture dir, and
 # records whether the observed admission result matched the expectation.
 function Invoke-Case {
@@ -88,14 +104,20 @@ function Invoke-Case {
     $match = ($observed -eq $Expected)
 
     $capturePath = Join-Path $CaptureDir ("demo-registry-{0}.txt" -f $Name)
-    $header = @(
+    $cleanText = Remove-CaptureNoise -Text $result.Text
+    $elided = ($result.Text | Select-String -Pattern 'Validation failed for ValidatingAdmissionPolicy' -Quiet)
+    $headerLines = @(
         "# Case: $Name"
         "# Expected: $Expected"
         "# Observed: $observed"
         "# kubectl exit code: $($result.ExitCode)"
-        "# ---"
-    ) -join [Environment]::NewLine
-    ($header + [Environment]::NewLine + $result.Text) |
+    )
+    if ($elided) {
+        $headerLines += '# Note: unrelated AKS Azure Policy add-on (ValidatingAdmissionPolicy) warnings elided for clarity.'
+    }
+    $headerLines += '# ---'
+    $header = $headerLines -join [Environment]::NewLine
+    ($header + [Environment]::NewLine + $cleanText) |
         Tee-Object -FilePath $capturePath | Out-Null
 
     $color = if ($match) { 'Green' } else { 'Red' }
