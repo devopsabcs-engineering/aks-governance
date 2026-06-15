@@ -133,9 +133,15 @@ Items identified during planning that fall outside current scope.
 * WI-06: Pin `clusterctl >= v1.13.2` in scripts/install-tools.ps1 (and document the CAPI-core/CAPZ version contract) so a fresh runner never installs a v1beta1-only clusterctl against CAPZ v1.24.1. (medium)
   * Source: DD-05 live fix.
   * Dependency: none.
-* WI-07: Provision the ArgoCD `repository` credential Secret in the pipeline before applying the root-app, since the repo is private (ArgoCD fails `Repository not found` without git creds). Source it from a repo secret (e.g. reuse `WIKI_PAT` or add `GH_TOKEN`). (high)
-  * Source: live ArgoCD repo-auth finding.
+* WI-07: Provision the ArgoCD `repository` credential Secret in the pipeline before applying the root-app, since the repo is private (ArgoCD fails `Repository not found` without git creds). Source it from a repo secret (e.g. reuse `WIKI_PAT` or add `GH_TOKEN`). (high) — **RESOLVED 2026-06-14**: `deploy-mgmt.ps1` now creates the `argocd.argoproj.io/secret-type=repository` Secret (guarded on `-GitToken`/`ARGOCD_GIT_TOKEN`) before applying the root-app and hard-refreshes the root app; the workflow passes `ARGOCD_GIT_TOKEN: ${{ github.token }}`.
+  * Source: live ArgoCD repo-auth finding; CI run 27519533156 showed root app `Unknown`.
   * Dependency: GitHub Actions OIDC wiring (done).
+* WI-08: Example B mis-targeting — `deploy-mgmt.ps1` documented but never installed Kyverno + the `enforce-min-k8s-version` policy on the management cluster, so CI Example B admitted the under-min control-plane CR (created a billable `under-min-demo` cluster) instead of denying it. (high) — **RESOLVED 2026-06-14**: deploy-mgmt now Helm-installs Kyverno (chart 3.8.1) on mgmt and applies the min-version policy there; also fixes the mgmt-context `clusterpolicy`/`policyreport` "no resource type" captures.
+  * Source: wiki `AKS-Governance-Demo.md` from CI run 27519533156.
+  * Dependency: none.
+* WI-09: Capture hygiene — ASO controllers captured from the non-existent `azureserviceoperator-system` namespace, and per-cluster `clusterctl describe` failed ("clusterctl not recognized") because the capture job lacked clusterctl. (medium) — **RESOLVED 2026-06-14**: capture.ps1 queries the bundled `capz-system` ASO deployment and falls back to `kubectl get cluster` when clusterctl is absent; the capture job also installs clusterctl.
+  * Source: wiki `AKS-Governance-Demo.md` from CI run 27519533156.
+  * Dependency: none.
 
 ## User Decisions
 
