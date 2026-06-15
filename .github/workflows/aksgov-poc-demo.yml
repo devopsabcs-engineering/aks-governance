@@ -58,6 +58,11 @@ env:
   RESOURCE_GROUP: ${{ inputs.resourceGroup }}
   LOCATION: ${{ inputs.location }}
   MGMT_CLUSTER_NAME: aksgov-poc-mgmt
+  # Pin kubelogin so `az aks install-cli` does NOT query the GitHub releases API
+  # (api.github.com is rate-limited to 60 req/hr unauthenticated on shared runners,
+  # which intermittently fails the install with "HTTP Error 403: rate limit exceeded").
+  # Pinning downloads the asset directly from the releases CDN, bypassing the API.
+  KUBELOGIN_VERSION: "0.2.18"
 
 jobs:
   preflight:
@@ -98,7 +103,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Install Helm
         shell: bash
@@ -144,7 +149,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Install clusterctl
         shell: bash
@@ -184,7 +189,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Get management cluster credentials
         shell: bash
@@ -216,7 +221,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Download workload kubeconfigs
         uses: actions/download-artifact@v4
@@ -261,7 +266,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Get management cluster credentials
         shell: bash
@@ -296,7 +301,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Install clusterctl
         shell: bash
@@ -388,7 +393,7 @@ jobs:
 
       - name: Install kubectl
         shell: bash
-        run: az aks install-cli --only-show-errors
+        run: az aks install-cli --kubelogin-version "${{ env.KUBELOGIN_VERSION }}" --only-show-errors
 
       - name: Get management cluster credentials
         continue-on-error: true
