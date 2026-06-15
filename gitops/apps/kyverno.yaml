@@ -1,0 +1,84 @@
+# gitops/apps/kyverno.yaml
+# Child Application (managed by the root app-of-apps) that installs the Kyverno policy
+# engine via its official Helm chart. Runs in sync-wave "0" so the Kyverno CRDs +
+# controller are present BEFORE the governance ApplicationSet (wave "1") fans ClusterPolicy
+# objects out to the workload clusters.
+#
+# DR-05 — CHART VERSION vs POLICY SCHEMA:
+#   targetRevision below pins a recent stable Kyverno chart (3.2.x line). Confirm this
+#   chart version ships the Kyverno CRD apiVersion (kyverno.io/v1) used by the policies in
+#   gitops/policies/kyverno before promoting beyond the PoC. Bumping the chart can change
+#   the ClusterPolicy schema; keep the chart version and the policy manifests in lockstep.
+#
+# DESTINATION — TWO SUPPORTED PATTERNS:
+#   This manifest demonstrates PATTERN 1 (in-cluster install) so the management cluster has
+#   a working Kyverno for a local registry demo. In the real topology Kyverno must run on
+#   EACH workload cluster (admission control happens where the workload lands). See the two
+#   patterns documented in the comments below the spec.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0" # install engine before policies (wave 1)
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://kyverno.github.io/kyverno/ # official Kyverno Helm repo
+    chart: kyverno
+    targetRevision: 3.2.6 # recent stable 3.2.x — see DR-05 note above (verify CRD schema)
+  destination:
+    # PATTERN 1 (this file): install Kyverno on the in-cluster management target so a
+    # registry-deny policy can be demoed locally without a workload cluster.
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true # Kyverno CRDs exceed the client-side annotation size limit
+#
+# ----------------------------------------------------------------------------------------
+# PATTERN 2 (recommended for the full multi-cluster demo): install Kyverno on every WORKLOAD
+# cluster instead of (or in addition to) the management cluster. Convert this Application
+# into an ApplicationSet driven by the same cluster generator used by
+# gitops/apps/governance-policies.yaml, e.g.:
+#
+#   apiVersion: argoproj.io/v1alpha1
+#   kind: ApplicationSet
+#   metadata:
+#     name: kyverno
+#     namespace: argocd
+#   spec:
+#     goTemplate: true
+#     generators:
+#       - clusters:
+#           selector:
+#             matchLabels:
+#               type: workload          # one Kyverno install per workload cluster
+#     template:
+#       metadata:
+#         name: 'kyverno-{{.name}}'
+#         annotations:
+#           argocd.argoproj.io/sync-wave: "0"
+#       spec:
+#         project: default
+#         source:
+#           repoURL: https://kyverno.github.io/kyverno/
+#           chart: kyverno
+#           targetRevision: 3.2.6
+#         destination:
+#           server: '{{.server}}'        # the workload cluster API server
+#           namespace: kyverno
+#         syncPolicy:
+#           automated: { prune: true, selfHeal: true }
+#           syncOptions: [ CreateNamespace=true, ServerSideApply=true ]
+#
+# With PATTERN 2, Kyverno (wave 0) and the governance policies (wave 1) both land on the
+# workload clusters, giving real admission-control enforcement at the workload boundary.
+# ----------------------------------------------------------------------------------------

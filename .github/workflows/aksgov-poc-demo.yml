@@ -1,0 +1,394 @@
+name: aksgov-poc-demo
+
+# End-to-end AKS Governance PoC: preflight -> deploy mgmt (CAPI/CAPZ/ASO + ArgoCD) ->
+# provision workload clusters -> register them in ArgoCD -> Example A (registry deny) ->
+# Example B (min-K8s-version reject) -> capture evidence -> optional wiki publish ->
+# approval-gated teardown.
+#
+# The teardown job is tied to the `aksgov-poc-teardown` GitHub Environment. Configure that
+# environment in repo Settings -> Environments with "Required reviewers" so the destroy
+# step pauses for manual approval before deleting any resource group. See docs/runbook.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      resourceGroup:
+        description: Management resource group for all PoC resources
+        type: string
+        default: rg-aksgov-poc-mgmt
+      location:
+        description: Primary / management Azure region
+        type: string
+        default: eastus2
+      workloadLocation2:
+        description: Second workload-cluster region (preflight checks both)
+        type: string
+        default: westus3
+      minK8sVersion:
+        description: Minimum Kubernetes version the enforce-min-k8s-version policy admits (informational for this run)
+        type: string
+        default: v1.28.0
+      kubernetesVersion:
+        description: AKS Kubernetes version for the management cluster (empty = AKS default)
+        type: string
+        default: ''
+      runCapture:
+        description: Capture CLI/portal evidence after the demos
+        type: boolean
+        default: true
+      publishWiki:
+        description: Publish the walkthrough to this repo's GitHub wiki (requires WIKI_PAT secret)
+        type: boolean
+        default: false
+      auditFirst:
+        description: Run Example A in Audit mode first (policies admit but report violations)
+        type: boolean
+        default: true
+
+# Serialize runs so two pipelines never operate on the same resource group at once.
+concurrency:
+  group: aksgov-poc-${{ inputs.resourceGroup }}
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # OIDC federated login to Azure
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ inputs.resourceGroup }}
+  LOCATION: ${{ inputs.location }}
+  MGMT_CLUSTER_NAME: aksgov-poc-mgmt
+
+jobs:
+  preflight:
+    name: Preflight - Azure readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run preflight checks
+        shell: bash
+        run: |
+          pwsh -File scripts/preflight.ps1 \
+            -Location '${{ inputs.location }}' \
+            -WorkloadLocation2 '${{ inputs.workloadLocation2 }}' \
+            -KubernetesVersion '${{ inputs.kubernetesVersion }}' \
+            -SubscriptionId '${{ secrets.AZURE_SUBSCRIPTION_ID }}'
+
+  deploy-mgmt:
+    name: Deploy management cluster + GitOps
+    needs: preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Install Helm
+        shell: bash
+        run: curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Install clusterctl
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/kubernetes-sigs/cluster-api/releases/latest/download/clusterctl-linux-amd64 -o clusterctl
+          sudo install -o root -g root -m 0755 clusterctl /usr/local/bin/clusterctl
+          clusterctl version
+
+      - name: Deploy management cluster (Bicep + clusterctl init + ArgoCD)
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          pwsh -File scripts/deploy-mgmt.ps1 \
+            -ResourceGroup '${{ inputs.resourceGroup }}' \
+            -Location '${{ inputs.location }}' \
+            -SubscriptionId '${{ secrets.AZURE_SUBSCRIPTION_ID }}' \
+            -KubernetesVersion '${{ inputs.kubernetesVersion }}' \
+            -UseFederatedLogin
+
+  provision:
+    name: Provision workload clusters (CAPI/CAPZ)
+    needs: deploy-mgmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Install clusterctl
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/kubernetes-sigs/cluster-api/releases/latest/download/clusterctl-linux-amd64 -o clusterctl
+          sudo install -o root -g root -m 0755 clusterctl /usr/local/bin/clusterctl
+
+      - name: Get management cluster credentials
+        shell: bash
+        run: az aks get-credentials --resource-group '${{ inputs.resourceGroup }}' --name "$MGMT_CLUSTER_NAME" --overwrite-existing --admin --only-show-errors
+
+      - name: Provision workload clusters
+        shell: bash
+        run: pwsh -File scripts/provision-clusters.ps1 -ClustersDir clusters
+
+      - name: Upload workload kubeconfigs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aksgov-kubeconfigs
+          path: kubeconfigs/
+          if-no-files-found: warn
+
+  register-argocd:
+    name: Register workload clusters in ArgoCD
+    needs: provision
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Get management cluster credentials
+        shell: bash
+        run: az aks get-credentials --resource-group '${{ inputs.resourceGroup }}' --name "$MGMT_CLUSTER_NAME" --overwrite-existing --admin --only-show-errors
+
+      - name: Download workload kubeconfigs
+        uses: actions/download-artifact@v4
+        with:
+          name: aksgov-kubeconfigs
+          path: kubeconfigs
+
+      - name: Register workload clusters
+        shell: bash
+        run: pwsh -File scripts/register-argocd-clusters.ps1 -KubeconfigDir kubeconfigs -ArgoNamespace argocd
+
+  demo-registry:
+    name: Example A - registry deny
+    needs: register-argocd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Download workload kubeconfigs
+        uses: actions/download-artifact@v4
+        with:
+          name: aksgov-kubeconfigs
+          path: kubeconfigs
+
+      - name: Point kubectl at a workload cluster
+        shell: bash
+        run: |
+          KC="$(ls kubeconfigs/*.kubeconfig | head -n 1)"
+          echo "KUBECONFIG=$GITHUB_WORKSPACE/$KC" >> "$GITHUB_ENV"
+
+      - name: Run registry-deny demo
+        shell: bash
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.auditFirst }}" = "true" ]; then EXTRA="-ExpectAudit"; fi
+          pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures $EXTRA
+
+      - name: Upload Example A captures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-registry
+          path: docs/captures/
+          if-no-files-found: warn
+
+  demo-min-version:
+    name: Example B - min K8s version reject
+    needs: demo-registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Get management cluster credentials
+        shell: bash
+        run: az aks get-credentials --resource-group '${{ inputs.resourceGroup }}' --name "$MGMT_CLUSTER_NAME" --overwrite-existing --admin --only-show-errors
+
+      - name: Run min-version reject demo
+        shell: bash
+        run: pwsh -File scripts/demo-min-version.ps1 -CaptureDir docs/captures
+
+      - name: Upload Example B captures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-min-version
+          path: docs/captures/
+          if-no-files-found: warn
+
+  capture:
+    name: Capture evidence
+    needs: demo-min-version
+    if: ${{ always() && inputs.runCapture }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Get management cluster credentials
+        shell: bash
+        run: az aks get-credentials --resource-group '${{ inputs.resourceGroup }}' --name "$MGMT_CLUSTER_NAME" --overwrite-existing --admin --only-show-errors
+
+      - name: Download Example A captures
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: captures-registry
+          path: docs/captures
+
+      - name: Download Example B captures
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: captures-min-version
+          path: docs/captures
+
+      - name: Capture CLI evidence
+        shell: bash
+        run: |
+          pwsh -File scripts/capture.ps1 \
+            -ResourceGroup '${{ inputs.resourceGroup }}' \
+            -MgmtClusterName "$MGMT_CLUSTER_NAME" \
+            -CaptureDir docs/captures \
+            -ScreenshotDir docs/screenshots \
+            -SkipScreenshots
+
+      - name: Upload PoC captures
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: aksgov-poc-captures
+          path: |
+            docs/captures/
+            docs/screenshots/
+          if-no-files-found: warn
+
+  publish-wiki:
+    name: Publish walkthrough
+    needs: capture
+    if: ${{ always() && inputs.publishWiki && needs.capture.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download PoC captures
+        uses: actions/download-artifact@v4
+        with:
+          name: aksgov-poc-captures
+          path: docs
+
+      - name: Publish to wiki
+        shell: bash
+        env:
+          WIKI_PAT: ${{ secrets.WIKI_PAT }}
+        run: |
+          pwsh -File scripts/publish-wiki.ps1 \
+            -Target github \
+            -WikiRepoUrl 'https://github.com/devopsabcs-engineering/aks-governance.wiki.git'
+
+  teardown:
+    name: Teardown (approval required)
+    needs: [deploy-mgmt, provision, register-argocd, demo-registry, demo-min-version, capture, publish-wiki]
+    # Run even if earlier jobs failed/were skipped so the demo never leaks cost,
+    # but only once the management cluster was actually created.
+    if: ${{ always() && needs.deploy-mgmt.result == 'success' }}
+    runs-on: ubuntu-latest
+    # Manual approval gate: the `aksgov-poc-teardown` environment must have
+    # required reviewers configured in repo Settings -> Environments.
+    environment: aksgov-poc-teardown
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubectl
+        shell: bash
+        run: az aks install-cli --only-show-errors
+
+      - name: Get management cluster credentials
+        continue-on-error: true
+        shell: bash
+        run: az aks get-credentials --resource-group '${{ inputs.resourceGroup }}' --name "$MGMT_CLUSTER_NAME" --overwrite-existing --admin --only-show-errors
+
+      - name: Cost-safe teardown (workload clusters first, then mgmt RG)
+        shell: bash
+        run: |
+          pwsh -File scripts/teardown.ps1 \
+            -ResourceGroup '${{ inputs.resourceGroup }}' \
+            -ClustersDir clusters \
+            -Force

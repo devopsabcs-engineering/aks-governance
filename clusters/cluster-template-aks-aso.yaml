@@ -1,0 +1,120 @@
+# =============================================================================
+# CAPZ aks-aso workload cluster template (parametrized)
+# =============================================================================
+# Cluster API Provider Azure (CAPZ) ASO-backed managed AKS cluster. Rendered by
+# `clusterctl generate cluster <name> --from clusters/cluster-template-aks-aso.yaml`
+# (envsubst-style dollar-brace placeholders, populated from clusters/<name>.env by
+# scripts/provision-clusters.ps1).
+#
+# Resources:
+#   - Cluster                       (cluster.x-k8s.io)
+#   - AzureASOManagedControlPlane   embeds ASO ManagedCluster (AKS control plane)
+#   - AzureASOManagedCluster        embeds ASO ResourceGroup
+#   - MachinePool + AzureASOManagedMachinePool  -> ASO ManagedClustersAgentPool (System pool)
+#
+# API VERSIONS (DR-01 / DD-03): VERIFIED LIVE on 2026-06-14 against CAPZ v1.24.1 +
+# bundled ASO on the management cluster. Storage/served versions confirmed:
+#   - cluster.x-k8s.io/v1beta1                       (Cluster, MachinePool)            [served]
+#   - infrastructure.cluster.x-k8s.io/v1beta1        (AzureASOManaged* resources)      [storage]
+#   - containerservice.azure.com/v1api20240901       (ManagedCluster, ...AgentPool)    [served]
+#   - resources.azure.com/v1api20200601              (ResourceGroup)                   [served]
+#
+# ASO CREDENTIAL: this template uses the GLOBAL ASO credential (the 'aso-controller-settings'
+# secret in capz-system, populated with the UAMI Workload Identity by scripts/deploy-mgmt.ps1).
+# No per-resource serviceoperator.azure.com/credential-from annotation is required.
+#
+# Required CAPI/CAPZ feature gates on the mgmt cluster: MachinePool=true (EXP_MACHINE_POOL),
+# ASOAPI/EXP_ASO_API (default on). Managed AKS supplies its own CNI/cloud-provider;
+# do NOT install Calico/cloud-provider-azure.
+# =============================================================================
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: default
+spec:
+  controlPlaneRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureASOManagedControlPlane
+    name: ${CLUSTER_NAME}
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureASOManagedCluster
+    name: ${CLUSTER_NAME}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureASOManagedControlPlane
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: default
+spec:
+  version: ${KUBERNETES_VERSION}     # enforced >= minimum by Kyverno (Example B) on the mgmt cluster
+  resources:
+  - apiVersion: containerservice.azure.com/v1api20240901
+    kind: ManagedCluster
+    metadata:
+      name: ${CLUSTER_NAME}
+    spec:
+      dnsPrefix: ${CLUSTER_NAME}
+      identity:
+        type: SystemAssigned
+      location: ${AZURE_LOCATION}
+      networkProfile:
+        networkPlugin: azure
+      owner:
+        name: ${CLUSTER_NAME}
+      servicePrincipalProfile:
+        clientId: msi
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureASOManagedCluster
+metadata:
+  name: ${CLUSTER_NAME}
+  namespace: default
+spec:
+  resources:
+  - apiVersion: resources.azure.com/v1api20200601
+    kind: ResourceGroup
+    metadata:
+      name: ${CLUSTER_NAME}
+    spec:
+      location: ${AZURE_LOCATION}
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: MachinePool
+metadata:
+  name: ${CLUSTER_NAME}-pool0
+  namespace: default
+spec:
+  clusterName: ${CLUSTER_NAME}
+  replicas: ${WORKER_MACHINE_COUNT:=2}
+  template:
+    metadata: {}
+    spec:
+      bootstrap:
+        dataSecretName: ""
+      clusterName: ${CLUSTER_NAME}
+      infrastructureRef:
+        apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+        kind: AzureASOManagedMachinePool
+        name: ${CLUSTER_NAME}-pool0
+      version: ${KUBERNETES_VERSION}
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureASOManagedMachinePool
+metadata:
+  name: ${CLUSTER_NAME}-pool0
+  namespace: default
+spec:
+  resources:
+  - apiVersion: containerservice.azure.com/v1api20240901
+    kind: ManagedClustersAgentPool
+    metadata:
+      name: ${CLUSTER_NAME}-pool0
+    spec:
+      azureName: pool0
+      mode: System           # at least one System pool is required by AKS
+      owner:
+        name: ${CLUSTER_NAME}
+      type: VirtualMachineScaleSets
+      vmSize: ${AZURE_NODE_MACHINE_TYPE}

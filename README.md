@@ -67,3 +67,14 @@ If I compress the whole report into one sentence:
 Do not make the single-subscription design your destination. Use it only if you need a near-term bridge around today’s cross-subscription constraints, but build toward a landing-zone-aligned multi-subscription ODS with managed identities, scoped RBAC, GitOps standardization, and AKS/ARO-specific governance paths.
 
 If you want, next I can turn this into a 6-slide executive deck or a 1-page decision memo in the same style.
+
+---
+
+## Proof of Concept
+
+A runnable CAPI/CAPZ + Kyverno + ArgoCD governance PoC backs this report. See
+**[docs/runbook.md](docs/runbook.md)** for the end-to-end operations runbook:
+required GitHub secrets, the OIDC app registration, the `aksgov-poc-teardown`
+approval environment, the local-first script run order, and the customer-demo
+walkthrough. The pipeline lives at
+[.github/workflows/aksgov-poc-demo.yml](.github/workflows/aksgov-poc-demo.yml).

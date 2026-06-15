@@ -1,0 +1,32 @@
+# gitops/bootstrap/root-app.yaml
+# App-of-apps ROOT Application. This is the only manifest applied manually (or by the
+# management-cluster bootstrap step). Syncing it recursively creates/syncs every child
+# Application under gitops/apps (Kyverno install + the governance ApplicationSet).
+#
+# OPERATOR ACTION REQUIRED:
+#   Set spec.source.repoURL below to the HTTPS clone URL of THIS aks-governance repo.
+#   Default points at the canonical devopsabcs-engineering fork; change it if you forked
+#   the repo to a different org/account.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io # cascade-delete children on app deletion
+spec:
+  project: default
+  source:
+    # <<< PLACEHOLDER: replace with your aks-governance repo HTTPS URL >>>
+    repoURL: https://github.com/devopsabcs-engineering/aks-governance.git
+    targetRevision: HEAD
+    path: gitops/apps # folder containing only child Application/ApplicationSet manifests
+  destination:
+    server: https://kubernetes.default.svc # the management (in-cluster) ArgoCD target
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

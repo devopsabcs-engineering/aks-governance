@@ -1,0 +1,54 @@
+# Demo sample for scripts/demo-min-version.ps1.
+#
+# An ASO-backed CAPZ workload cluster whose control-plane spec.version (v1.27.0) is
+# BELOW the configured minimum (v1.28.0). Applying this to the management cluster is
+# expected to be REJECTED by the Kyverno ClusterPolicy `enforce-min-k8s-version`
+# (gitops/policies/kyverno/enforce-min-k8s-version.yaml) with a message naming the
+# minimum version. This manifest is intentionally minimal and is NOT meant to fully
+# provision a cluster — it exists only to trigger the admission denial.
+#
+# API version note: infrastructure.cluster.x-k8s.io is pinned to v1beta1, the storage
+# version exposed by the installed CAPZ provider (verified live 2026-06-14 against
+# CAPZ v1.24.1: `kubectl get crd azureasomanagedcontrolplanes... -o jsonpath` shows
+# v1beta1 storage=true). ASO uses the global aso-controller-settings credential, so no
+# per-resource serviceoperator.azure.com/credential-from annotation is needed.
+---
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: under-min-demo
+  namespace: default
+spec:
+  clusterNetwork:
+    services:
+      cidrBlocks:
+        - 10.96.0.0/12
+  controlPlaneRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureASOManagedControlPlane
+    name: under-min-demo
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: AzureASOManagedCluster
+    name: under-min-demo
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: AzureASOManagedControlPlane
+metadata:
+  name: under-min-demo
+  namespace: default
+spec:
+  # Below the v1.28.0 minimum -> Kyverno enforce-min-k8s-version denies this apply.
+  version: v1.27.0
+  resources:
+    - apiVersion: containerservice.azure.com/v1api20240901
+      kind: ManagedCluster
+      metadata:
+        name: under-min-demo
+      spec:
+        owner:
+          name: rg-aksgov-poc-mgmt
+        location: eastus2
+        identity:
+          type: SystemAssigned
+        dnsPrefix: under-min-demo

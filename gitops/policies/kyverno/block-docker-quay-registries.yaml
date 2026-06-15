@@ -1,0 +1,115 @@
+# Kyverno Example A — deny container images sourced from docker.io and quay.io.
+#
+# Demo narrative (Audit -> Enforce): this policy ships as Audit so violations are
+# reported via `kubectl get policyreport -A` without blocking. A later git commit
+# flips `validationFailureAction` to `Enforce`, ArgoCD self-heals, and the bad Pod
+# is then rejected at admission. See scripts/demo-registry.ps1.
+#
+# Schema note (DR-05 / DD-04): Kyverno moved the failure action from the
+# policy-level `spec.validationFailureAction` to a per-rule `validate.failureAction`
+# in 1.12+. The policy-level field below still works in current charts (it is the
+# deprecated-but-supported form) and is used here for the clean Audit->Enforce
+# narrative. If your installed Kyverno chart rejects `spec.validationFailureAction`,
+# delete it and uncomment the per-rule `failureAction:` line inside the rule's
+# `validate:` block instead. Pick the one form that matches your chart version.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: block-docker-quay-registries
+  annotations:
+    policies.kyverno.io/title: Block docker.io and quay.io registries
+    policies.kyverno.io/category: Governance
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: Pod
+    policies.kyverno.io/description: >-
+      Denies Pods whose containers, initContainers, or ephemeralContainers pull
+      images from docker.io or quay.io. Allowed registries: mcr.microsoft.com,
+      registry.k8s.io, and the customer ACR (<name>.azurecr.io).
+spec:
+  # Audit first (report-only) for the demo; flip to Enforce to block. See note above.
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: block-known-public-registries
+      match:
+        any:
+          # Scope to the demo namespace so cluster add-ons (cert-manager, ingress,
+          # CSI drivers, etc.) in other namespaces keep pulling without interruption.
+          #
+          # To run this cluster-wide instead, replace the namespaced match below with:
+          #   - resources:
+          #       kinds: [Pod]
+          # and add an exclude block so platform namespaces are never blocked:
+          #   exclude:
+          #     any:
+          #       - resources:
+          #           namespaces: [kube-system, argocd, kyverno]
+          - resources:
+              kinds: [Pod]
+              namespaces: [governance-demo]
+      validate:
+        # Kyverno 1.12+ per-rule form (uncomment and remove spec.validationFailureAction
+        # above if your chart requires it):
+        # failureAction: Audit
+        message: >-
+          Images from docker.io and quay.io are not allowed. Use mcr.microsoft.com,
+          registry.k8s.io, or your ACR (<name>.azurecr.io).
+        deny:
+          conditions:
+            # `images.*.registry` is Kyverno's parsed image data: the registry host is
+            # extracted even when the image reference omits it (defaulting to docker.io),
+            # which makes a bare `nginx` reference resolve to docker.io and be denied.
+            any:
+              - key: "{{ images.containers.*.registry || `[]` }}"
+                operator: AnyIn
+                value:
+                  - docker.io
+                  - quay.io
+              - key: "{{ images.initContainers.*.registry || `[]` }}"
+                operator: AnyIn
+                value:
+                  - docker.io
+                  - quay.io
+              - key: "{{ images.ephemeralContainers.*.registry || `[]` }}"
+                operator: AnyIn
+                value:
+                  - docker.io
+                  - quay.io
+    # ---------------------------------------------------------------------------
+    # Alternative allow-list rule (disabled by default).
+    #
+    # The rule above is a deny-list: it blocks two known public registries and is
+    # deterministic for the demo. For stricter governance, prefer an allow-list that
+    # denies ANY registry not explicitly approved. Delete the rule above and enable
+    # this one to switch models. The customer ACR placeholder lives here.
+    #
+    # - name: allow-only-approved-registries
+    #   match:
+    #     any:
+    #       - resources:
+    #           kinds: [Pod]
+    #           namespaces: [governance-demo]
+    #   validate:
+    #     message: >-
+    #       Only mcr.microsoft.com, registry.k8s.io, and the customer ACR are allowed.
+    #     deny:
+    #       conditions:
+    #         any:
+    #           - key: "{{ images.containers.*.registry || `[]` }}"
+    #             operator: AnyNotIn
+    #             value:
+    #               - mcr.microsoft.com
+    #               - registry.k8s.io
+    #               - ${ACR_LOGIN_SERVER}   # e.g. myacr.azurecr.io — substitute at deploy time
+    #           - key: "{{ images.initContainers.*.registry || `[]` }}"
+    #             operator: AnyNotIn
+    #             value:
+    #               - mcr.microsoft.com
+    #               - registry.k8s.io
+    #               - ${ACR_LOGIN_SERVER}
+    #           - key: "{{ images.ephemeralContainers.*.registry || `[]` }}"
+    #             operator: AnyNotIn
+    #             value:
+    #               - mcr.microsoft.com
+    #               - registry.k8s.io
+    #               - ${ACR_LOGIN_SERVER}

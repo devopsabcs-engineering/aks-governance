@@ -1,0 +1,16 @@
+# Demo: minimum Kubernetes version guardrail
+# Sample: samples/under-min-version.yaml
+# Expected: REJECTED, message mentions v1.28.0
+# Observed denied: True
+# Observed mentions-min-version: True
+# kubectl exit code: 1
+# ---
+Warning: cluster.x-k8s.io/v1beta1 Cluster is deprecated; use cluster.x-k8s.io/v1beta2 Cluster
+cluster.cluster.x-k8s.io/under-min-demo created
+Error from server: error when creating "samples/under-min-version.yaml": admission webhook "validate.kyverno.svc-fail" denied the request: 
+
+resource AzureASOManagedControlPlane/default/under-min-demo was blocked due to the following policies 
+
+enforce-min-k8s-version:
+  capz-control-plane-min-version: Workload clusters must run Kubernetes v1.28.0 or
+    newer.

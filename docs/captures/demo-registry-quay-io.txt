@@ -1,0 +1,12 @@
+# Case: quay-io
+# Expected: DENIED
+# Observed: DENIED
+# kubectl exit code: 1
+# ---
+Error from server: error when creating "STDIN": admission webhook "validate.kyverno.svc-fail" denied the request: 
+
+resource Pod/governance-demo/demo-quay-busybox was blocked due to the following policies 
+
+block-docker-quay-registries:
+  block-known-public-registries: Images from docker.io and quay.io are not allowed.
+    Use mcr.microsoft.com, registry.k8s.io, or your ACR (<name>.azurecr.io).

@@ -1,0 +1,6 @@
+# Case: mcr-microsoft-com
+# Expected: ADMITTED
+# Observed: ADMITTED
+# kubectl exit code: 0
+# ---
+pod/demo-mcr-busybox created

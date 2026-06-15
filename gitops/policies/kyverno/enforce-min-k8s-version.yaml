@@ -1,0 +1,64 @@
+# Kyverno Example B — minimum Kubernetes version guardrail on the MANAGEMENT cluster.
+#
+# There is no per-Pod Kubernetes version to validate, so the admission-style
+# guardrail is applied to the workload-cluster-defining infrastructure CR instead.
+# This policy inspects the control-plane CR's `spec.version` and rejects creation or
+# update when it is below the configured minimum. Kyverno's comparison operators do
+# semver math only on bare semver (e.g. 1.28.0); a leading `v` makes the major number
+# unparseable ("Invalid character(s) found in major number \"v1\"") and the deny
+# condition silently evaluates false. The leading `v` is stripped with regex_replace_all
+# before comparison (verified live 2026-06-14 against Kyverno v1.18.1).
+#
+# Configured minimum: v1.28.0. Keep the value in the deny condition and the version
+# named in the message in sync if you change it.
+#
+# Schema note (DR-05 / DD-04): if your installed Kyverno chart rejects the
+# policy-level `spec.validationFailureAction`, remove it and uncomment the per-rule
+# `validate.failureAction` line instead (Kyverno 1.12+). Use only one form.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: enforce-min-k8s-version
+  annotations:
+    policies.kyverno.io/title: Minimum Kubernetes version for workload clusters
+    policies.kyverno.io/category: Governance
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/subject: AzureASOManagedControlPlane
+    policies.kyverno.io/description: >-
+      Denies workload-cluster control-plane CRs whose spec.version is below the
+      configured minimum Kubernetes version (v1.28.0).
+spec:
+  # Enforce at admission so an under-min control plane is rejected outright.
+  validationFailureAction: Enforce
+  # CR validation is admission-time only; there is no background-scan equivalent.
+  background: false
+  rules:
+    - name: capz-control-plane-min-version
+      match:
+        any:
+          # Targets the ASO-backed CAPZ control-plane CR used by the aks-aso flavor
+          # (group infrastructure.cluster.x-k8s.io). To also guard self-managed CAPZ
+          # or generic CAPI control planes, add AzureManagedControlPlane and
+          # KubeadmControlPlane to this kinds list.
+          - resources:
+              kinds:
+                - AzureASOManagedControlPlane
+      validate:
+        # Kyverno 1.12+ per-rule form (uncomment and remove spec.validationFailureAction
+        # above if your chart requires it):
+        # failureAction: Enforce
+        # The message MUST name the minimum version so the rejection is self-explanatory.
+        message: "Workload clusters must run Kubernetes v1.28.0 or newer."
+        deny:
+          conditions:
+            any:
+              # DR-04: `spec.version` is the field on CAPI/CAPZ/ASO control-plane CRs
+              # (e.g. v1.30.3). Confirm this exact path against the deployed CRD's API
+              # version before relying on it — some ASO CRD revisions move or rename the
+              # field. Adjust the JMESPath below if `kubectl explain
+              # azureasomanagedcontrolplane.spec` shows a different location.
+              # The leading `v` is stripped so both operands are bare semver; Kyverno
+              # then compares 1.27.0 LessThan 1.28.0 as semver.
+              - key: "{{ regex_replace_all('^v', '{{ request.object.spec.version }}', '') }}"
+                operator: LessThan
+                value: "1.28.0"

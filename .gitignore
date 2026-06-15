@@ -1,0 +1,22 @@
+# CAPI/CAPZ provisioning working directories and retrieved credentials.
+# Rendered cluster manifests (clusterctl generate output).
+generated/
+
+# Retrieved workload-cluster kubeconfigs.
+kubeconfigs/
+*.kubeconfig
+
+# Persisted Playwright/browser auth state for portal + ArgoCD screenshot capture.
+# Contains cookies/tokens that can impersonate the user - NEVER commit it.
+storage_state.json
+docs/storage_state.json
+
+# Node/Playwright toolchain used by docs/capture-argocd.ts.
+node_modules/
+docs/node_modules/
+
+# Private keys / certs that may be produced during a demo.
+*.pem
+
+# Transient task-tracking scratch (provision logs, kubectl patch files).
+.copilot-tracking/tmp/

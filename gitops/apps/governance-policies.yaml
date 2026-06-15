@@ -1,0 +1,44 @@
+# gitops/apps/governance-policies.yaml
+# Child ApplicationSet (managed by the root app-of-apps) that fans the Kyverno governance
+# policies out to EVERY registered workload cluster. Runs in sync-wave "1" so it applies
+# after the Kyverno engine (gitops/apps/kyverno.yaml, wave "0").
+#
+# The cluster generator reads the ArgoCD cluster Secrets and templates one Application per
+# Secret whose labels match selector.matchLabels {type: workload}. Because the in-cluster
+# management target has NO cluster Secret, it is naturally excluded — policies only land on
+# the remote workload clusters registered by scripts/register-argocd-clusters.ps1.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: governance-policies
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            type: workload # only workload clusters; excludes mgmt/in-cluster (no Secret)
+  template:
+    metadata:
+      name: 'policies-{{.name}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1" # after Kyverno engine install (wave 0)
+    spec:
+      project: default
+      source:
+        # <<< PLACEHOLDER: replace with your aks-governance repo HTTPS URL >>>
+        repoURL: https://github.com/devopsabcs-engineering/aks-governance.git
+        targetRevision: HEAD
+        path: gitops/policies/kyverno # folder of ClusterPolicy YAML
+      destination:
+        server: '{{.server}}' # the matched workload cluster API server
+        namespace: kyverno
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
