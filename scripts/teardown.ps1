@@ -24,6 +24,11 @@
 .PARAMETER ResourceGroup
     The management resource group to delete LAST. Default 'rg-aksgov-poc-mgmt'.
 
+.PARAMETER MgmtClusterName
+    Management AKS cluster name. The CAPI cascade delete (Step 1) talks to this cluster's
+    API server, so the teardown starts it first when it is Stopped (a stopped AKS cluster
+    has no reachable API server). Default 'aksgov-poc-mgmt'.
+
 .PARAMETER ClustersDir
     Directory containing per-cluster '.env' input files (one per workload cluster). The
     cluster list is discovered from these files rather than hardcoded. Default 'clusters'.
@@ -54,6 +59,7 @@
 [CmdletBinding()]
 param(
     [string]$ResourceGroup = 'rg-aksgov-poc-mgmt',
+    [string]$MgmtClusterName = 'aksgov-poc-mgmt',
     [string]$ClustersDir = 'clusters',
     [string]$Timeout = '30m',
     [switch]$Force,
@@ -175,6 +181,63 @@ function Test-RgExists {
     return (($out | Select-Object -First 1) -eq 'true')
 }
 
+# --- Management cluster readiness -------------------------------------------------------
+# Step 1 (the CAPI cascade delete) talks to the management cluster's API server. A STOPPED
+# AKS cluster has no reachable API server - its FQDN does not even resolve - so the teardown
+# must ensure the management cluster is running first. Starting it also brings the CAPZ/ASO
+# controllers back so they can reconcile the workload-RG deletion. When the management
+# cluster no longer exists (already torn down), this is a no-op so the workload RGs can still
+# be reaped by a later run.
+function Confirm-MgmtClusterRunning {
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroup,
+        [Parameter(Mandatory)][string]$ClusterName
+    )
+
+    $power = az aks show --resource-group $ResourceGroup --name $ClusterName `
+        --query 'powerState.code' -o tsv --only-show-errors 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($power)) {
+        Write-Capture ("    management cluster '{0}' not found in RG '{1}' (already deleted?); skipping start." -f $ClusterName, $ResourceGroup) 'Yellow'
+        return
+    }
+
+    $started = $false
+    if ($power -eq 'Running') {
+        Write-Capture ("    management cluster '{0}' is Running." -f $ClusterName) 'Green'
+    }
+    else {
+        Write-Capture ("    management cluster '{0}' is {1}; starting it so the CAPI delete can reach the API server..." -f $ClusterName, $power) 'Yellow'
+        az aks start --resource-group $ResourceGroup --name $ClusterName --only-show-errors
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to start management cluster '$ClusterName' in RG '$ResourceGroup' (exit $LASTEXITCODE). Cannot run the CAPI cascade delete against a stopped cluster."
+        }
+        Write-Capture ("    management cluster '{0}' started." -f $ClusterName) 'Green'
+        $started = $true
+    }
+
+    # Refresh kubeconfig/context so kubectl targets the (now-running) management cluster.
+    az aks get-credentials --resource-group $ResourceGroup --name $ClusterName --admin --overwrite-existing --only-show-errors | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to get admin credentials for management cluster '$ClusterName' (exit $LASTEXITCODE)."
+    }
+
+    # After a cold start the API server FQDN can take a short while to resolve and warm up.
+    # Poll until kubectl can reach it (bounded) so Step 1 does not race a not-yet-ready API.
+    if ($started) {
+        $apiDeadline = (Get-Date).AddMinutes(5)
+        while ($true) {
+            kubectl get --raw='/readyz' --request-timeout=15s *> $null
+            if ($LASTEXITCODE -eq 0) { break }
+            if ((Get-Date) -gt $apiDeadline) {
+                throw "Management cluster API server for '$ClusterName' did not become reachable within 5m after start."
+            }
+            Write-Capture '    waiting for management API server to become reachable (15s)...'
+            Start-Sleep -Seconds 15
+        }
+        Write-Capture '    management API server is reachable.' 'Green'
+    }
+}
+
 # ========================================================================================
 # Main flow
 # ========================================================================================
@@ -202,6 +265,12 @@ if (-not $Force) {
         return
     }
 }
+
+# --- Step 0: ensure the management cluster is running and reachable ----------------------
+# The CAPI cascade delete below requires the management cluster's API server. Start it if it
+# is Stopped (and refresh credentials), otherwise the kubectl delete fails with a DNS error.
+Write-Capture '==> [0/3] Ensuring the management cluster is running (the CAPI delete needs its API server)...' 'Cyan'
+Confirm-MgmtClusterRunning -ResourceGroup $ResourceGroup -ClusterName $MgmtClusterName
 
 # --- Step 1: cascade-delete workload clusters via CAPI ----------------------------------
 Write-Capture ("==> [1/3] Deleting CAPI Cluster objects: {0}" -f ($clusterNames -join ', ')) 'Yellow'

@@ -400,5 +400,6 @@ jobs:
         run: |
           pwsh -File scripts/teardown.ps1 \
             -ResourceGroup '${{ inputs.resourceGroup }}' \
+            -MgmtClusterName "$MGMT_CLUSTER_NAME" \
             -ClustersDir clusters \
             -Force
