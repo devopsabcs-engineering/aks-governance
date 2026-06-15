@@ -116,16 +116,26 @@ function Invoke-Capture {
 # --- Leg 1: deterministic CLI text capture (always runs) ---
 Write-Host "Capturing CLI evidence to $resolvedCaptureDir ..."
 
-# Management cluster health: nodes + CAPI/CAPZ/ASO controller pods.
+# Management cluster health: nodes + CAPI/CAPZ/ASO controller pods. CAPZ bundles ASO INTO
+# the capz-system namespace (there is no separate azureserviceoperator-system namespace), so
+# the ASO controller is captured by its deployment name in capz-system.
 Invoke-Capture -Dir $resolvedCaptureDir -File '01-mgmt-nodes.txt'        -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'nodes', '-o', 'wide'))
 Invoke-Capture -Dir $resolvedCaptureDir -File '02-capi-controllers.txt'  -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'pods', '-n', 'capi-system', '-o', 'wide'))
 Invoke-Capture -Dir $resolvedCaptureDir -File '03-capz-controllers.txt'  -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'pods', '-n', 'capz-system', '-o', 'wide'))
-Invoke-Capture -Dir $resolvedCaptureDir -File '04-aso-controllers.txt'   -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'pods', '-n', 'azureserviceoperator-system', '-o', 'wide'))
+Invoke-Capture -Dir $resolvedCaptureDir -File '04-aso-controllers.txt'   -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'deployment', 'azureserviceoperator-controller-manager', '-n', 'capz-system', '-o', 'wide'))
 
-# Workload cluster provisioning: CAPI Cluster objects + per-cluster description.
+# Workload cluster provisioning: CAPI Cluster objects + per-cluster description. clusterctl
+# gives the richest tree but may be absent on a bare runner; fall back to 'kubectl get
+# cluster' so the capture never degrades to a 'clusterctl not recognized' error.
+$clusterctlAvailable = [bool](Get-Command clusterctl -ErrorAction SilentlyContinue)
 Invoke-Capture -Dir $resolvedCaptureDir -File '05-clusters.txt'          -Exe 'kubectl'    -Arguments ($kubeCtx + @('get', 'clusters', '-A', '-o', 'wide'))
 foreach ($name in $WorkloadClusters) {
-    Invoke-Capture -Dir $resolvedCaptureDir -File "05-cluster-$name.txt"  -Exe 'clusterctl' -Arguments ($clusterctlCtx + @('describe', 'cluster', $name))
+    if ($clusterctlAvailable) {
+        Invoke-Capture -Dir $resolvedCaptureDir -File "05-cluster-$name.txt"  -Exe 'clusterctl' -Arguments ($clusterctlCtx + @('describe', 'cluster', $name))
+    }
+    else {
+        Invoke-Capture -Dir $resolvedCaptureDir -File "05-cluster-$name.txt"  -Exe 'kubectl' -Arguments ($kubeCtx + @('get', 'cluster', $name, '-o', 'wide'))
+    }
 }
 
 # ArgoCD GitOps sync: Applications + registered workload cluster Secrets.

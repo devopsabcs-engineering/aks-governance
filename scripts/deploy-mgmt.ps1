@@ -20,6 +20,10 @@
       6. Wire ASO Workload Identity: annotate/label the ASO controller SA, create the aso-credentials
          Secret with USE_WORKLOAD_IDENTITY_AUTH=true.
       7. helm upgrade --install argocd (idempotent).
+      7b. helm upgrade --install kyverno on the management cluster + apply the
+          min-K8s-version ClusterPolicy (Example B admission runs on the mgmt cluster).
+      7c. (guarded) create the ArgoCD repository credential Secret when a git token is
+          supplied so a private app-of-apps source can sync (WI-07).
       8. kubectl apply gitops/bootstrap/root-app.yaml (guarded: tolerated missing until Phase 4).
       9. Readiness checks for capi/capz/aso controllers + the AzureASOManagedControlPlane CRD.
 
@@ -40,7 +44,17 @@ param(
     [string]$KubernetesVersion = '',
     [switch]$UseFederatedLogin,
     # How often (seconds) to re-mint the federated OIDC token during long polls. CI only.
-    [int]$ReauthIntervalSeconds = 240
+    [int]$ReauthIntervalSeconds = 240,
+    # Kyverno Helm chart version installed on the MANAGEMENT cluster to host the
+    # min-K8s-version CR-admission policy (Example B). Keep in lockstep with the
+    # workload-cluster Kyverno pinned in gitops/apps/kyverno.yaml.
+    [string]$KyvernoChartVersion = '3.8.1',
+    # Git repo URL + credentials for the ArgoCD repository Secret. Without credentials a
+    # private repo leaves the app-of-apps root in 'Unknown' sync state. The token is read
+    # from -GitToken or the ARGOCD_GIT_TOKEN env var (e.g. the Actions GITHUB_TOKEN).
+    [string]$GitRepoUrl = 'https://github.com/devopsabcs-engineering/aks-governance.git',
+    [string]$GitToken = '',
+    [string]$GitUsername = 'x-access-token'
 )
 
 Set-StrictMode -Version Latest
@@ -301,12 +315,84 @@ helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace --wait
 if ($LASTEXITCODE -ne 0) { throw 'Failed to install ArgoCD via Helm.' }
 
 # ---------------------------------------------------------------------------
+# 7b. Install Kyverno on the MANAGEMENT cluster (Helm) and apply the min-K8s-version
+#     ClusterPolicy. Example B (scripts/demo-min-version.ps1) applies an under-minimum
+#     AzureASOManagedControlPlane to THIS cluster; that CR only exists where CAPI/CAPZ
+#     reconcile (the management cluster), so the guardrail must run here, not on the
+#     workload clusters fanned by the governance ApplicationSet. Chart $KyvernoChartVersion
+#     matches the validated policy schema (gitops/apps/kyverno.yaml pins the same line for
+#     the workload clusters).
+# ---------------------------------------------------------------------------
+Write-Host '==> Installing Kyverno on the management cluster (helm upgrade --install)...' -ForegroundColor Cyan
+helm repo add kyverno https://kyverno.github.io/kyverno/ 2>$null
+[void]$LASTEXITCODE
+helm repo update kyverno 2>$null
+[void]$LASTEXITCODE
+helm upgrade --install kyverno kyverno/kyverno -n kyverno --create-namespace --version $KyvernoChartVersion --wait
+if ($LASTEXITCODE -ne 0) { throw 'Failed to install Kyverno on the management cluster.' }
+
+# Wait for the ClusterPolicy CRD + admission controller before applying the policy.
+kubectl wait --for=condition=Established --timeout=120s crd/clusterpolicies.kyverno.io
+if ($LASTEXITCODE -ne 0) { Write-Warning 'Kyverno ClusterPolicy CRD did not report Established within the timeout.' }
+kubectl rollout status deployment/kyverno-admission-controller -n kyverno --timeout=180s
+[void]$LASTEXITCODE
+
+$minVersionPolicyPath = Join-Path $repoRoot 'gitops/policies/kyverno/enforce-min-k8s-version.yaml'
+if (Test-Path -Path $minVersionPolicyPath) {
+    Write-Host "==> Applying min-K8s-version ClusterPolicy ($minVersionPolicyPath)..." -ForegroundColor Cyan
+    kubectl apply -f $minVersionPolicyPath
+    if ($LASTEXITCODE -ne 0) { throw "Failed to apply the min-K8s-version policy '$minVersionPolicyPath'." }
+}
+else {
+    Write-Warning "Min-version policy '$minVersionPolicyPath' not found; Example B will not be enforced."
+}
+
+# ---------------------------------------------------------------------------
+# 7c. (Guarded) ArgoCD repository credential. Without git credentials ArgoCD cannot compare
+#     the app-of-apps source for a PRIVATE repo, leaving the root Application in 'Unknown'
+#     sync state and the governance ApplicationSets uncreated (WI-07). When a token is
+#     supplied (env ARGOCD_GIT_TOKEN, e.g. the Actions GITHUB_TOKEN) the repository Secret
+#     is created before the root app is applied. Harmless / skipped for public repos.
+# ---------------------------------------------------------------------------
+$argoGitToken = if (-not [string]::IsNullOrWhiteSpace($GitToken)) { $GitToken } else { $env:ARGOCD_GIT_TOKEN }
+if (-not [string]::IsNullOrWhiteSpace($argoGitToken)) {
+    Write-Host "==> Creating ArgoCD repository credential for '$GitRepoUrl'..." -ForegroundColor Cyan
+    $repoSecret = [ordered]@{
+        apiVersion = 'v1'
+        kind       = 'Secret'
+        metadata   = [ordered]@{
+            name      = 'aksgov-repo'
+            namespace = 'argocd'
+            labels    = @{ 'argocd.argoproj.io/secret-type' = 'repository' }
+        }
+        stringData = [ordered]@{
+            type     = 'git'
+            url      = $GitRepoUrl
+            username = $GitUsername
+            password = $argoGitToken
+        }
+    } | ConvertTo-Json -Depth 6
+    $repoSecretFile = Join-Path ([System.IO.Path]::GetTempPath()) 'argocd-repo-secret.json'
+    $repoSecret | Set-Content -NoNewline -Path $repoSecretFile
+    kubectl apply -f $repoSecretFile
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Failed to create ArgoCD repository credential; the root app may stay Unknown for a private repo.' }
+    Remove-Item -Path $repoSecretFile -ErrorAction SilentlyContinue
+}
+else {
+    Write-Host '    No ARGOCD_GIT_TOKEN provided; skipping ArgoCD repository credential (fine for public repos).' -ForegroundColor Gray
+}
+
+# ---------------------------------------------------------------------------
 # 8. Apply the GitOps app-of-apps root. Authored in Phase 4 (Step 4.1); tolerate absence here.
 # ---------------------------------------------------------------------------
 if (Test-Path -Path $rootAppPath) {
     Write-Host "==> Applying GitOps root app ($rootAppPath)..." -ForegroundColor Cyan
     kubectl apply -f $rootAppPath
     if ($LASTEXITCODE -ne 0) { throw "Failed to apply root app '$rootAppPath'." }
+    # Nudge ArgoCD to re-compare immediately so the app-of-apps children appear without
+    # waiting for the next reconcile poll (also clears a stale 'Unknown' after creds change).
+    kubectl annotate application root -n argocd argocd.argoproj.io/refresh=hard --overwrite 2>$null
+    [void]$LASTEXITCODE
 }
 else {
     Write-Warning "Root app '$rootAppPath' not found (authored in Phase 4). Skipping GitOps bootstrap apply."

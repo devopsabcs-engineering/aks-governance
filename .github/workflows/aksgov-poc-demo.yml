@@ -117,6 +117,9 @@ jobs:
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          # Lets ArgoCD authenticate to this (potentially private) repo for the app-of-apps
+          # source, so the root Application syncs instead of sitting in 'Unknown' (WI-07).
+          ARGOCD_GIT_TOKEN: ${{ github.token }}
         run: |
           pwsh -File scripts/deploy-mgmt.ps1 \
             -ResourceGroup '${{ inputs.resourceGroup }}' \
@@ -294,6 +297,13 @@ jobs:
       - name: Install kubectl
         shell: bash
         run: az aks install-cli --only-show-errors
+
+      - name: Install clusterctl
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/kubernetes-sigs/cluster-api/releases/latest/download/clusterctl-linux-amd64 -o clusterctl
+          sudo install -o root -g root -m 0755 clusterctl /usr/local/bin/clusterctl
+          clusterctl version
 
       - name: Get management cluster credentials
         shell: bash
