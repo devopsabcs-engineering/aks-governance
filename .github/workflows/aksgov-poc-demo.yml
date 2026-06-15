@@ -39,7 +39,7 @@ on:
       publishWiki:
         description: Publish the walkthrough to this repo's GitHub wiki (requires WIKI_PAT secret)
         type: boolean
-        default: false
+        default: true
       auditFirst:
         description: Run Example A in Audit mode first (policies admit but report violations)
         type: boolean
