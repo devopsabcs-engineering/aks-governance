@@ -27,7 +27,7 @@ metadata:
       registry.k8s.io, and the customer ACR (<name>.azurecr.io).
 spec:
   # Audit first (report-only) for the demo; flip to Enforce to block. See note above.
-  validationFailureAction: Audit
+  validationFailureAction: Enforce
   background: true
   rules:
     - name: block-known-public-registries
