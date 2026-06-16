@@ -35,6 +35,16 @@ spec:
       destination:
         server: '{{.server}}' # the matched workload cluster API server
         namespace: kyverno
+      # Kyverno rewrites metadata.managedFields on the ClusterPolicy objects as its
+      # controllers take field ownership, which ArgoCD otherwise reports as perpetual
+      # "OutOfSync" even though the policy spec is identical to git. This only affects
+      # ArgoCD's diff/sync-status computation — never what is applied — so real spec
+      # drift is still detected. See gitops/policies/kyverno/*.yaml.
+      ignoreDifferences:
+        - group: kyverno.io
+          kind: ClusterPolicy
+          jsonPointers:
+            - /metadata/managedFields
       syncPolicy:
         automated:
           prune: true
