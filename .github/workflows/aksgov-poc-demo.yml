@@ -40,10 +40,6 @@ on:
         description: Publish the walkthrough to this repo's GitHub wiki (requires WIKI_PAT secret)
         type: boolean
         default: true
-      auditFirst:
-        description: Expect Example A in Audit mode (admit + report) instead of the committed Enforce policy's deny. Leave false — the policy YAML is validationFailureAction=Enforce, so the demo asserts a real deny.
-        type: boolean
-        default: false
 
 # Serialize runs so two pipelines never operate on the same resource group at once.
 concurrency:
@@ -271,12 +267,14 @@ jobs:
             sleep 15
           done
 
-      - name: Run registry-deny demo
+      - name: Run registry-deny demo (two-phase Audit -> Enforce)
         shell: bash
         run: |
-          EXTRA=""
-          if [ "${{ inputs.auditFirst }}" = "true" ]; then EXTRA="-ExpectAudit"; fi
-          pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures $EXTRA
+          # demo-registry.ps1 runs both phases against this workload cluster: it patches
+          # the live policy to Audit (admit + capture a PolicyReport), then flips it back
+          # to Enforce (block) and captures the denies. selfHeal is off on the policies
+          # ApplicationSet so ArgoCD does not revert the in-run Audit toggle.
+          pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures
 
       - name: Upload Example A captures
         if: ${{ always() }}

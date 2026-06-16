@@ -1,9 +1,13 @@
 # Kyverno Example A — deny container images sourced from docker.io and quay.io.
 #
-# Demo narrative (Audit -> Enforce): this policy ships as Audit so violations are
-# reported via `kubectl get policyreport -A` without blocking. A later git commit
-# flips `validationFailureAction` to `Enforce`, ArgoCD self-heals, and the bad Pod
-# is then rejected at admission. See scripts/demo-registry.ps1.
+# Demo narrative (Audit -> Enforce): git defines this policy in `Enforce` mode (the
+# desired end-state — block bad registries at admission). scripts/demo-registry.ps1
+# demonstrates the realistic rollout in one run: it first patches the live policy to
+# `Audit` so violations are *reported* via `kubectl get policyreport` without blocking
+# (the report a team reviews before enforcing), captures that report, then flips back
+# to `Enforce` and shows the same Pods being rejected at admission. The governance
+# policies ApplicationSet runs with selfHeal=false so ArgoCD does not fight that live
+# Audit<->Enforce toggle; git remains the source of truth for the end-state.
 #
 # Schema note (DR-05 / DD-04): Kyverno moved the failure action from the
 # policy-level `spec.validationFailureAction` to a per-rule `validate.failureAction`
@@ -26,7 +30,9 @@ metadata:
       images from docker.io or quay.io. Allowed registries: mcr.microsoft.com,
       registry.k8s.io, and the customer ACR (<name>.azurecr.io).
 spec:
-  # Audit first (report-only) for the demo; flip to Enforce to block. See note above.
+  # Enforce is the desired end-state: block docker.io/quay.io at admission. The demo
+  # driver (scripts/demo-registry.ps1) toggles this to Audit and back at runtime to
+  # show the report-then-block flow; selfHeal is off so ArgoCD does not revert it.
   validationFailureAction: Enforce
   background: true
   rules:

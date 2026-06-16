@@ -38,7 +38,13 @@ spec:
       syncPolicy:
         automated:
           prune: true
-          selfHeal: true
+          # selfHeal is intentionally OFF: the registry demo (scripts/demo-registry.ps1)
+          # temporarily patches the live block-docker-quay-registries ClusterPolicy to
+          # Audit to capture a PolicyReport, then back to Enforce. With selfHeal enabled
+          # ArgoCD would race to revert that live edit. Git still defines Enforce as the
+          # desired end-state, and ArgoCD auto-syncs on any git change; only unsolicited
+          # live drift is left alone.
+          selfHeal: false
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

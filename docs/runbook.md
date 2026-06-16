@@ -176,9 +176,8 @@ pwsh -File scripts/provision-clusters.ps1 -ClustersDir clusters
 # 4. Register the workload clusters into ArgoCD (labels type=workload)
 pwsh -File scripts/register-argocd-clusters.ps1 -KubeconfigDir kubeconfigs -ArgoNamespace argocd
 
-# 5. Example A — registry deny (Audit first, then Enforce: see narrative below)
-pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures -ExpectAudit  # Audit pass
-pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures               # Enforce pass
+# 5. Example A — registry deny (one run does both phases: Audit report -> Enforce deny)
+pwsh -File scripts/demo-registry.ps1 -CaptureDir docs/captures
 
 # 6. Example B — minimum Kubernetes version reject (validated on the mgmt cluster)
 pwsh -File scripts/demo-min-version.ps1 -CaptureDir docs/captures
@@ -207,7 +206,7 @@ pwsh -File scripts/teardown.ps1 -ResourceGroup rg-aksgov-poc-mgmt -ClustersDir c
    - `resourceGroup` (default `rg-aksgov-poc-mgmt`)
    - `location` (default `eastus2`), `workloadLocation2` (default `westus3`)
    - `minK8sVersion` (default `v1.28.0`), `kubernetesVersion` (empty = AKS default)
-   - `runCapture` (default true), `publishWiki` (default false), `auditFirst` (default true)
+   - `runCapture` (default true), `publishWiki` (default true)
 4. Watch the job graph: `preflight -> deploy-mgmt -> provision -> register-argocd ->
    demo-registry -> demo-min-version -> capture -> publish-wiki -> teardown`.
 5. When the run reaches **teardown**, approve it in the environment prompt to
@@ -219,19 +218,22 @@ Failed demo jobs still upload their diagnostic captures (`if: always()`).
 
 ## Audit to Enforce demo narrative
 
-The governance examples land as **Audit** first, then flip to **Enforce** — the
-core message that policy can observe before it blocks.
+The registry example (Example A) demonstrates the realistic rollout in a **single
+run**: `scripts/demo-registry.ps1` patches the live policy to Audit, captures the
+report, then flips it back to Enforce — the core message that policy can observe
+before it blocks. (The policy's committed/desired state is `Enforce`; the demo
+toggles it at runtime, and the governance-policies ApplicationSet runs with
+`selfHeal: false` so ArgoCD does not revert the in-run Audit phase.)
 
-1. **Audit** — policies sync in Audit mode. Apply a `docker.io`/`quay.io` Pod and
-   it is **admitted**, but `kubectl get policyreport -A` records the violation.
-   In the pipeline this is the default path (`auditFirst: true` →
-   `demo-registry.ps1 -ExpectAudit`). Capture the PolicyReport screenshot.
-2. **Flip to Enforce** — a single Git commit changes the policy
-   `validationFailureAction` from `Audit` to `Enforce`. ArgoCD self-heals and
-   reconciles the change to the workload clusters.
+1. **Audit** — the script patches `validationFailureAction` to `Audit`. Apply a
+   `docker.io`/`quay.io` Pod and it is **admitted**, but `kubectl get policyreport -n
+   governance-demo` on the workload cluster records the violation. Captured as
+   `demo-registry-audit-*.txt`.
+2. **Flip to Enforce** — the script patches `validationFailureAction` back to
+   `Enforce` (its git/desired state).
 3. **Enforce** — re-apply the same bad Pod; admission now **denies** it. Capture
-   the denial. The allow-listed `mcr.microsoft.com` Pod still passes throughout,
-   so add-ons keep pulling.
+   the denial (`demo-registry-docker-io.txt` / `-quay-io.txt`). The allow-listed
+   `mcr.microsoft.com` Pod still passes throughout, so add-ons keep pulling.
 4. **Example B** — apply an under-minimum-version CAPZ cluster CR on the
    management cluster; the `enforce-min-k8s-version` policy **rejects** it.
 

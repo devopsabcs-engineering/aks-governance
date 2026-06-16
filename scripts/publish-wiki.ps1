@@ -160,12 +160,15 @@ function New-DemoMarkdown {
         '06-argocd-applicationsets' = '`kubectl get applicationsets -n argocd` - the cluster-generator `ApplicationSet` that templates a policy Application for each workload cluster labeled `type=workload`.'
         '07-argocd-clusters'      = '`kubectl get secrets -n argocd -l argocd.argoproj.io/secret-type=cluster` - the two registered workload cluster Secrets. Each CAPI `<cluster>-kubeconfig` Secret is converted into an ArgoCD cluster Secret so policies can be synced to it.'
         '08-kyverno-policies'     = '`kubectl get clusterpolicy` on the management cluster - the `enforce-min-k8s-version` policy (B) that rejects an under-minimum CAPZ control-plane CR at admission. The registry-deny policy (A) runs on the workload clusters (admission happens where the workload lands); its enforcement is shown in the Example A captures below.'
-        '09-policy-reports'       = '`kubectl get policyreport -A` on the management cluster. The governance policies run in **Enforce** mode, so a violating Pod is rejected at admission and never created - Kyverno produces a `PolicyReport` only for admitted-but-violating resources (background scans / Audit mode), so none exist for the blocked Pods. The management cluster''s only policy (`enforce-min-k8s-version`) is admission-only (`background: false`), so `No resources found` here is expected; the enforcement evidence is the Example A/B admission-deny captures below.'
+        '09-policy-reports'       = '`kubectl get policyreport -A` on the **management** cluster. Its only policy (`enforce-min-k8s-version`) is admission-only (`background: false`) and runs in Enforce, so violations are blocked before any object exists and `No resources found` here is expected. The genuine **workload-cluster** PolicyReport — produced when the registry policy is in Audit mode — is captured live during Example A and shown in the **Audit-phase PolicyReport** section below.'
         '10-mgmt-aks'             = '`az aks show` - the management AKS cluster with its OIDC issuer and workload-identity flags, confirming the identity wiring CAPZ/ASO depend on.'
         '11-aks-inventory'        = '`az aks list` - the live AKS inventory across the subscription (management + both CAPZ-provisioned workload clusters) with their Kubernetes versions.'
-        'demo-registry-docker-io' = '**Example A - registry governance (deny).** A Pod pulling from `docker.io` is rejected at admission by the Kyverno `block-docker-quay-registries` policy (`validationFailureAction: Enforce`). See the capture header for the expected vs observed result.'
-        'demo-registry-quay-io'  = '**Example A - registry governance (deny).** A Pod pulling from `quay.io` is likewise rejected at admission by the same Kyverno policy under Enforce.'
-        'demo-registry-mcr-microsoft-com' = '**Example A - registry governance (allow).** An allow-listed `mcr.microsoft.com` image is admitted, proving the policy denies only disallowed registries.'
+        'demo-registry-audit-docker-io' = '**Example A - Audit phase (report, not block).** With the policy in `validationFailureAction: Audit`, a Pod pulling from `docker.io` is **ADMITTED** - the violation is recorded, not blocked. Contrast with the Enforce-phase deny below.'
+        'demo-registry-audit-quay-io' = '**Example A - Audit phase (report, not block).** With the policy in Audit, a Pod pulling from `quay.io` is likewise **ADMITTED** and only reported.'
+        'demo-registry-audit-policyreport' = '**Example A - Audit-phase PolicyReport.** `kubectl get policyreport -n governance-demo` on the workload cluster after the two violating Pods were admitted under Audit. Kyverno''s reports controller records a `fail` result for each (`block-docker-quay-registries`) - this is the report a team reviews before flipping the policy to Enforce.'
+        'demo-registry-docker-io' = '**Example A - Enforce phase (deny).** After flipping the policy to `validationFailureAction: Enforce`, the same `docker.io` Pod is now rejected at admission by the Kyverno `block-docker-quay-registries` policy. See the capture header for expected vs observed.'
+        'demo-registry-quay-io'  = '**Example A - Enforce phase (deny).** Under Enforce the `quay.io` Pod is likewise rejected at admission by the same Kyverno policy.'
+        'demo-registry-mcr-microsoft-com' = '**Example A - Enforce phase (allow).** An allow-listed `mcr.microsoft.com` image is admitted even under Enforce, proving the policy denies only disallowed registries.'
         'demo-min-version'       = '**Example B - minimum Kubernetes version.** Applying an under-minimum `AzureASOManagedControlPlane` is rejected at admission by the Kyverno `enforce-min-k8s-version` policy, with the configured minimum version echoed in the error message.'
         'teardown'               = '`scripts/teardown.ps1` - CAPI-ordered teardown: delete the `Cluster` objects, wait for the workload resource groups to drain, then delete the management resource group so no Azure cost is left behind.'
     }
@@ -177,6 +180,7 @@ function New-DemoMarkdown {
         '06-argocd-applications', '06-argocd-applicationsets', '07-argocd-clusters',
         '08-kyverno-policies', '09-policy-reports',
         '10-mgmt-aks', '11-aks-inventory',
+        'demo-registry-audit-docker-io', 'demo-registry-audit-quay-io', 'demo-registry-audit-policyreport',
         'demo-registry-docker-io', 'demo-registry-quay-io', 'demo-registry-mcr-microsoft-com',
         'demo-min-version', 'teardown'
     )
@@ -216,7 +220,7 @@ function New-DemoMarkdown {
     $null = $sb.AppendLine('- **GitOps fan-out** - ArgoCD registers each workload cluster and an `ApplicationSet` syncs the governance policy bundle to every cluster.')
     $null = $sb.AppendLine('- **Example A - registry governance** - a Kyverno policy denies container images from `docker.io` / `quay.io` (allow-list: `mcr.microsoft.com`, the customer ACR, `registry.k8s.io`).')
     $null = $sb.AppendLine('- **Example B - minimum Kubernetes version** - a Kyverno policy rejects an under-minimum CAPZ control-plane at admission, with the minimum version in the error.')
-    $null = $sb.AppendLine('- **Enforce mode** - the governance policies are deployed in `Enforce` mode and block violations at admission. The before/after contrast is an allow-listed `mcr.microsoft.com` image being admitted while `docker.io`/`quay.io` are denied.')
+    $null = $sb.AppendLine('- **Audit -> Enforce rollout** - Example A first runs the registry policy in `Audit` mode so the docker.io/quay.io Pods are admitted and the violations are recorded in a Kyverno `PolicyReport` (the report a team reviews); it then flips the same policy to `Enforce`, where those Pods are blocked at admission while an allow-listed `mcr.microsoft.com` image still passes.')
     $null = $sb.AppendLine('- **Evidence capture** - CLI output and screenshots are published here for review; teardown then deletes everything to keep costs near-zero between demos.')
     $null = $sb.AppendLine()
 
