@@ -35,16 +35,23 @@ spec:
       destination:
         server: '{{.server}}' # the matched workload cluster API server
         namespace: kyverno
-      # Kyverno rewrites metadata.managedFields on the ClusterPolicy objects as its
-      # controllers take field ownership, which ArgoCD otherwise reports as perpetual
-      # "OutOfSync" even though the policy spec is identical to git. This only affects
-      # ArgoCD's diff/sync-status computation — never what is applied — so real spec
-      # drift is still detected. See gitops/policies/kyverno/*.yaml.
+      # Kyverno's mutating admission webhook injects default fields into every
+      # ClusterPolicy spec at apply time (spec.admission, spec.emitWarning, and per-rule
+      # spec.rules[].skipBackgroundRequests / spec.rules[].validate.allowExistingViolations).
+      # These defaults are absent from git, so ArgoCD otherwise reports the policies-<cluster>
+      # apps as perpetually OutOfSync even though the authored spec is identical. Ignore only
+      # those Kyverno-defaulted fields; genuine spec drift is still detected. This affects
+      # ArgoCD's diff/sync-status only — never what is applied. (Confirmed via live-vs-git
+      # diff of the applied ClusterPolicy on 2026-06-16.)
       ignoreDifferences:
         - group: kyverno.io
           kind: ClusterPolicy
           jsonPointers:
-            - /metadata/managedFields
+            - /spec/admission
+            - /spec/emitWarning
+          jqPathExpressions:
+            - '.spec.rules[].skipBackgroundRequests'
+            - '.spec.rules[].validate.allowExistingViolations'
       syncPolicy:
         automated:
           prune: true

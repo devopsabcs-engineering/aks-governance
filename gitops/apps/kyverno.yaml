@@ -48,32 +48,21 @@ spec:
       destination:
         server: '{{.server}}' # the matched workload cluster API server
         namespace: kyverno
-      # Kyverno manages its OWN admission-webhook configurations after install: the
-      # cert-controller injects clientConfig.caBundle and the webhook-controller rewrites
-      # the rules / failurePolicy / selectors to match the policies actually loaded. The
-      # Helm chart ships these webhooks with placeholder/empty values, so ArgoCD otherwise
-      # reports the kyverno-<cluster> apps as perpetually OutOfSync. Ignore only those
-      # Kyverno-owned fields; genuine drift on everything else is still detected. This is
-      # the documented Kyverno + ArgoCD behaviour (https://kyverno.io/docs/installation/).
+      # The Kyverno Helm chart ships its CustomResourceDefinitions WITHOUT a
+      # spec.conversion stanza, but the Kubernetes API server always defaults one in
+      # (conversion: { strategy: None }). Likewise the chart emits empty
+      # metadata.annotations/labels maps that the API server drops. Neither is real
+      # drift, yet ArgoCD reports every kyverno CRD -- and therefore the kyverno-<cluster>
+      # apps -- as perpetually OutOfSync. Ignore only those server-defaulted fields;
+      # genuine schema drift is still detected. (Confirmed via `argocd app diff` /
+      # live-vs-desired comparison on 2026-06-16; documented ArgoCD + CRD behaviour.)
       ignoreDifferences:
-        - group: admissionregistration.k8s.io
-          kind: MutatingWebhookConfiguration
-          jqPathExpressions:
-            - '.webhooks[].clientConfig.caBundle'
-            - '.webhooks[].rules'
-            - '.webhooks[].failurePolicy'
-            - '.webhooks[].namespaceSelector'
-            - '.webhooks[].objectSelector'
-            - '.webhooks[].matchConditions'
-        - group: admissionregistration.k8s.io
-          kind: ValidatingWebhookConfiguration
-          jqPathExpressions:
-            - '.webhooks[].clientConfig.caBundle'
-            - '.webhooks[].rules'
-            - '.webhooks[].failurePolicy'
-            - '.webhooks[].namespaceSelector'
-            - '.webhooks[].objectSelector'
-            - '.webhooks[].matchConditions'
+        - group: apiextensions.k8s.io
+          kind: CustomResourceDefinition
+          jsonPointers:
+            - /spec/conversion
+            - /metadata/annotations
+            - /metadata/labels
       syncPolicy:
         automated:
           prune: true
