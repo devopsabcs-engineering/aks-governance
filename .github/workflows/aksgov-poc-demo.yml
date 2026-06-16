@@ -41,9 +41,9 @@ on:
         type: boolean
         default: true
       auditFirst:
-        description: Run Example A in Audit mode first (policies admit but report violations)
+        description: Expect Example A in Audit mode (admit + report) instead of the committed Enforce policy's deny. Leave false — the policy YAML is validationFailureAction=Enforce, so the demo asserts a real deny.
         type: boolean
-        default: true
+        default: false
 
 # Serialize runs so two pipelines never operate on the same resource group at once.
 concurrency:
@@ -240,6 +240,30 @@ jobs:
         run: |
           KC="$(ls kubeconfigs/*.kubeconfig | head -n 1)"
           echo "KUBECONFIG=$GITHUB_WORKSPACE/$KC" >> "$GITHUB_ENV"
+
+      - name: Wait for ArgoCD to fan out Kyverno + registry policy
+        shell: bash
+        run: |
+          # The registry ClusterPolicy reaches this workload cluster only via the ArgoCD
+          # app-of-apps fan-out (Kyverno engine wave 0, policies wave 1), which is async and
+          # starts only after the cluster Secret is registered. Wait for the policy to be
+          # Ready before applying demo Pods so we assert real governance rather than racing
+          # ahead of the sync (a miss would otherwise admit the Pod and mask a broken fan-out).
+          echo "Waiting for block-docker-quay-registries ClusterPolicy to become Ready..."
+          deadline=$(( $(date +%s) + 900 ))   # up to 15 minutes
+          until kubectl get clusterpolicy block-docker-quay-registries >/dev/null 2>&1 \
+                && [ "$(kubectl get clusterpolicy block-docker-quay-registries -o jsonpath='{.status.ready}' 2>/dev/null)" = "true" ]; do
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for the Kyverno registry policy on the workload cluster. The ArgoCD GitOps fan-out is likely not working (check the root Application / ApplicationSets and the ARGOCD_GIT_PAT credential)."
+              kubectl get clusterpolicy -A 2>/dev/null || true
+              kubectl get pods -n kyverno 2>/dev/null || true
+              exit 1
+            fi
+            echo "  ...not Ready yet; retrying in 15s"
+            sleep 15
+          done
+          echo "ClusterPolicy is Ready (validationFailureAction=Enforce):"
+          kubectl get clusterpolicy block-docker-quay-registries -o wide || true
 
       - name: Run registry-deny demo
         shell: bash
