@@ -200,16 +200,25 @@ function Wait-ForPolicyReportFail {
             if ($parsed -and $parsed.PSObject.Properties.Name -contains 'items') {
                 foreach ($report in $parsed.items) {
                     if (-not ($report.PSObject.Properties.Name -contains 'results')) { continue }
+                    # Modern Kyverno emits one PolicyReport per resource and identifies that
+                    # resource on the report-level `.scope` (the per-result `resources` array
+                    # is then omitted). Older/aggregated reports put it on `result.resources`.
+                    $scope = if ($report.PSObject.Properties.Name -contains 'scope') { $report.scope } else { $null }
                     foreach ($res in $report.results) {
-                        if ($res.result -ne 'fail') { continue }
-                        if ($res.policy -ne $PolicyName) { continue }
-                        $rule = if ($res.PSObject.Properties.Name -contains 'rule') { $res.rule } else { '' }
-                        foreach ($r in @($res.resources)) {
+                        $rprops = $res.PSObject.Properties.Name
+                        if (($rprops -notcontains 'result') -or ($res.result -ne 'fail')) { continue }
+                        if (($rprops -notcontains 'policy') -or ($res.policy -ne $PolicyName)) { continue }
+                        $rule = if ($rprops -contains 'rule') { $res.rule } else { '' }
+                        $refs = @()
+                        if (($rprops -contains 'resources') -and $res.resources) { $refs = @($res.resources) }
+                        elseif ($scope) { $refs = @($scope) }
+                        foreach ($r in $refs) {
+                            $kprops = $r.PSObject.Properties.Name
                             $fails += [pscustomobject]@{
                                 Policy = $res.policy
                                 Rule   = $rule
-                                Kind   = $r.kind
-                                Name   = $r.name
+                                Kind   = if ($kprops -contains 'kind') { $r.kind } else { '' }
+                                Name   = if ($kprops -contains 'name') { $r.name } else { '' }
                             }
                         }
                     }
@@ -288,7 +297,29 @@ spec:
 $allPods = @('demo-docker-nginx', 'demo-quay-busybox', 'demo-mcr-busybox')
 
 function Remove-DemoPods {
-    Invoke-Kubectl -Arguments (@('delete', 'pod', '-n', $Namespace) + $allPods + @('--ignore-not-found', '--wait=false')) | Out-Null
+    # Force/immediate delete so a lingering (terminating) Pod from a previous phase
+    # cannot make the next `kubectl apply` a no-op ("unchanged"), which would skip the
+    # admission webhook and mask a real deny.
+    Invoke-Kubectl -Arguments (@('delete', 'pod', '-n', $Namespace) + $allPods +
+        @('--ignore-not-found', '--grace-period=0', '--force')) | Out-Null
+}
+
+# Blocks until none of the demo Pods exist (so a re-apply is evaluated as a fresh CREATE).
+function Wait-PodsGone {
+    param([int]$TimeoutSec = 90)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ($true) {
+        $present = foreach ($p in $allPods) {
+            $r = Invoke-Kubectl -Arguments @('get', 'pod', '-n', $Namespace, $p, '--ignore-not-found', '-o', 'name')
+            if ($r.Text.Trim()) { $p }
+        }
+        if (-not $present) { return }
+        if ((Get-Date) -ge $deadline) {
+            Write-Host ("    (still terminating after {0}s: {1})" -f $TimeoutSec, ($present -join ', ')) -ForegroundColor Yellow
+            return
+        }
+        Start-Sleep -Seconds 3
+    }
 }
 
 try {
@@ -301,6 +332,7 @@ try {
 
     # Start from a clean slate so the report reflects freshly-admitted Pods.
     Remove-DemoPods
+    Wait-PodsGone
 
     Invoke-Case -Name 'audit-docker-io' -Manifest $dockerPod -Expected 'ADMITTED' -Phase 'Audit' | Out-Null
     Invoke-Case -Name 'audit-quay-io'   -Manifest $quayPod   -Expected 'ADMITTED' -Phase 'Audit' | Out-Null
@@ -343,7 +375,7 @@ try {
 
     # Remove the Audit-phase Pods so the re-apply is evaluated fresh under Enforce.
     Remove-DemoPods
-    Start-Sleep -Seconds 3
+    Wait-PodsGone
 
     Invoke-Case -Name 'docker-io'         -Manifest $dockerPod -Expected 'DENIED'   -Phase 'Enforce' | Out-Null
     Invoke-Case -Name 'quay-io'           -Manifest $quayPod   -Expected 'DENIED'   -Phase 'Enforce' | Out-Null
