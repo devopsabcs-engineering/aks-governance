@@ -251,8 +251,16 @@ jobs:
           # ahead of the sync (a miss would otherwise admit the Pod and mask a broken fan-out).
           echo "Waiting for block-docker-quay-registries ClusterPolicy to become Ready..."
           deadline=$(( $(date +%s) + 900 ))   # up to 15 minutes
-          until kubectl get clusterpolicy block-docker-quay-registries >/dev/null 2>&1 \
-                && [ "$(kubectl get clusterpolicy block-docker-quay-registries -o jsonpath='{.status.ready}' 2>/dev/null)" = "true" ]; do
+          while :; do
+            # Kyverno >=1.10 reports readiness via .status.conditions[type=Ready];
+            # older builds used the now-deprecated boolean .status.ready. Accept either.
+            RC="$(kubectl get clusterpolicy block-docker-quay-registries -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || true)"
+            RB="$(kubectl get clusterpolicy block-docker-quay-registries -o jsonpath='{.status.ready}' 2>/dev/null || true)"
+            if [ "$RC" = "True" ] || [ "$RB" = "true" ]; then
+              echo "ClusterPolicy is Ready (validationFailureAction=Enforce):"
+              kubectl get clusterpolicy block-docker-quay-registries -o wide || true
+              break
+            fi
             if [ "$(date +%s)" -ge "$deadline" ]; then
               echo "::error::Timed out waiting for the Kyverno registry policy on the workload cluster. The ArgoCD GitOps fan-out is likely not working (check the root Application / ApplicationSets and the ARGOCD_GIT_PAT credential)."
               kubectl get clusterpolicy -A 2>/dev/null || true
@@ -262,8 +270,6 @@ jobs:
             echo "  ...not Ready yet; retrying in 15s"
             sleep 15
           done
-          echo "ClusterPolicy is Ready (validationFailureAction=Enforce):"
-          kubectl get clusterpolicy block-docker-quay-registries -o wide || true
 
       - name: Run registry-deny demo
         shell: bash
