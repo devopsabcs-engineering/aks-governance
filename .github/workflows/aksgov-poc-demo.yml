@@ -19,11 +19,11 @@ on:
       location:
         description: Primary / management Azure region
         type: string
-        default: eastus2
+        default: canadacentral
       workloadLocation2:
         description: Second workload-cluster region (preflight checks both)
         type: string
-        default: westus3
+        default: canadacentral
       minK8sVersion:
         description: Minimum Kubernetes version the enforce-min-k8s-version policy admits (informational for this run)
         type: string
