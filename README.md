@@ -12,6 +12,7 @@
 
 ## Table of contents
 
+- [Terminology](#terminology)
 - [Bottom line](#bottom-line)
 - [Why a multi-subscription model is the best fit](#why-a-multi-subscription-model-is-the-best-fit)
 - [AKS vs ARO governance is not symmetric](#aks-vs-aro-governance-is-not-symmetric)
@@ -22,6 +23,26 @@
 - [Executive one-liner](#executive-one-liner)
 - [Proof of Concept](#proof-of-concept)
 - [References](#references)
+
+---
+
+## Terminology
+
+> [!NOTE]
+> **ODS** — *Offre de Service* (Service Offering): the central Desjardins platform/self-service
+> capability that provisions and governs Kubernetes (AKS, and ARO where required) on behalf of
+> internal clients. Throughout this document, "ODS" refers to that central platform team and its
+> deployment automation — e.g., the entity granted scoped rights to deploy into workload
+> subscriptions and the owner of centralized observability and governance.
+>
+> **Federated ODS** — the recommended target shape of that service offering: the same central
+> governance/tooling/observability hosted in platform subscriptions, with workload clusters
+> **federated** into per-client [landing-zone subscriptions][caf-lz]. This contrasts with the
+> concentrated **single-subscription bootstrap**, where everything lives in one subscription.
+>
+> Other acronyms used below: **AKS** (Azure Kubernetes Service), **ARO** (Azure Red Hat OpenShift),
+> **CAPI/CAPZ** (Cluster API / Cluster API Provider Azure), **ASO** (Azure Service Operator),
+> **GIA** (Desjardins identity & access management / *Gestion des identités et des accès*).
 
 ---
 

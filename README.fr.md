@@ -13,6 +13,7 @@
 
 ## Table des matières
 
+- [Terminologie](#terminologie)
 - [En résumé](#en-résumé)
 - [Pourquoi un modèle multi-abonnements est le meilleur choix](#pourquoi-un-modèle-multi-abonnements-est-le-meilleur-choix)
 - [La gouvernance AKS et ARO n'est pas symétrique](#la-gouvernance-aks-et-aro-nest-pas-symétrique)
@@ -23,6 +24,28 @@
 - [Phrase exécutive](#phrase-exécutive)
 - [Preuve de concept](#preuve-de-concept)
 - [Références](#références)
+
+---
+
+## Terminologie
+
+> [!NOTE]
+> **ODS** — *Offre de Service* : la capacité centrale de plateforme / libre-service de Desjardins
+> qui provisionne et gouverne Kubernetes (AKS, et ARO lorsque requis) pour le compte des clients
+> internes. Dans ce document, « ODS » désigne cette équipe plateforme centrale et son automatisation
+> de déploiement — par exemple, l'entité à qui sont accordés des droits restreints pour déployer
+> dans les abonnements de charge de travail, et le propriétaire de l'observabilité et de la
+> gouvernance centralisées.
+>
+> **ODS fédéré** — la forme cible recommandée de cette offre de service : la même
+> gouvernance/outillage/observabilité centralisés hébergés dans des abonnements de plateforme, avec
+> les clusters de charge de travail **fédérés** dans des [abonnements de zone d'atterrissage][caf-lz]
+> par client. Cela contraste avec l'**amorçage à abonnement unique** concentré, où tout réside dans
+> un seul abonnement.
+>
+> Autres acronymes utilisés ci-dessous : **AKS** (Azure Kubernetes Service), **ARO** (Azure Red Hat
+> OpenShift), **CAPI/CAPZ** (Cluster API / Cluster API Provider Azure), **ASO** (Azure Service
+> Operator), **GIA** (Gestion des identités et des accès).
 
 ---
 
