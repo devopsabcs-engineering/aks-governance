@@ -23,7 +23,7 @@ on:
       workloadLocation2:
         description: Second workload-cluster region (preflight checks both)
         type: string
-        default: canadacentral
+        default: canadaeast
       minK8sVersion:
         description: Minimum Kubernetes version the enforce-min-k8s-version policy admits (informational for this run)
         type: string
