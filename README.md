@@ -1,4 +1,4 @@
-# AKS Governance — Desjardins Kubernetes Governance Architecture
+# AKS Governance — ACME Inc. Kubernetes Governance Architecture
 
 > **Strategic governance reference and runnable Proof of Concept** for deploying and governing
 > Azure Kubernetes Service (AKS) — and, where required, Azure Red Hat OpenShift (ARO) — for
@@ -6,7 +6,7 @@
 
 🌐 **Language:** **English** · [Français](README.fr.md)
 
-📄 **Companion report:** `Desjardins_Kubernetes_Governance_Architecture_Report.docx`
+📄 **Companion report:** `ACME_Kubernetes_Governance_Architecture_Report.docx`
 
 ---
 
@@ -29,7 +29,7 @@
 ## Terminology
 
 > [!NOTE]
-> **ODS** — *Offre de Service* (Service Offering): the central Desjardins platform/self-service
+> **ODS** — *Offre de Service* (Service Offering): the central ACME Inc. platform/self-service
 > capability that provisions and governs Kubernetes (AKS, and ARO where required) on behalf of
 > internal clients. Throughout this document, "ODS" refers to that central platform team and its
 > deployment automation — e.g., the entity granted scoped rights to deploy into workload
@@ -42,7 +42,7 @@
 >
 > Other acronyms used below: **AKS** (Azure Kubernetes Service), **ARO** (Azure Red Hat OpenShift),
 > **CAPI/CAPZ** (Cluster API / Cluster API Provider Azure), **ASO** (Azure Service Operator),
-> **GIA** (Desjardins identity & access management / *Gestion des identités et des accès*).
+> **GIA** (ACME Inc. identity & access management / *Gestion des identités et des accès*).
 
 ---
 
@@ -52,10 +52,10 @@
 > **Strategic recommendation:** move toward a **landing-zone-aligned multi-subscription ODS**
 > (central governance/tooling, with workload clusters in client-aligned
 > [landing-zone subscriptions][caf-lz]), and treat the **single-subscription model only as a
-> tactical bootstrap** pattern if Desjardins needs a short path around current cross-subscription
+> tactical bootstrap** pattern if ACME Inc. needs a short path around current cross-subscription
 > network / GIA friction.
 
-That recommendation is grounded in Desjardins' own ODS objectives: simplify AKS/ARO consumption,
+That recommendation is grounded in ACME Inc.'s own ODS objectives: simplify AKS/ARO consumption,
 centralize observability/governance, support both client-oriented and mutualized service tiers,
 prefer AKS by default, and use ARO only for specific workload classes such as CP4D and MQ. It is
 also consistent with Microsoft's [landing-zone guidance][caf-lz], which places shared
@@ -68,7 +68,7 @@ landing-zone subscriptions** with centralized policy and [hub-and-spoke connecti
 
 ### Least privilege / GIA
 
-Desjardins explicitly asked how to deploy AKS and ARO for internal clients with the **minimum
+ACME Inc. explicitly asked how to deploy AKS and ARO for internal clients with the **minimum
 rights possible**, called out the problematic `Microsoft.Authorization/*/Write` permission family,
 and asked for pre-provisioned landing zones plus [custom roles][custom-roles]. A multi-subscription
 landing-zone model is the cleanest way to enforce those boundaries because prerequisites can be
@@ -85,7 +85,7 @@ foundation is still forming.
 
 ### Why single-sub should not be the end state
 
-The same notes flag **scale and boundary pressure** — Desjardins already references **130–140 AKS
+The same notes flag **scale and boundary pressure** — ACME Inc. already references **130–140 AKS
 clusters** and the need to size VNets for large node counts and "predict Azure limits." Those limits
 are real and bounded: a single subscription is capped (for example, [**5,000 AKS clusters per
 subscription** and **5,000 nodes per cluster**][aks-quotas]), and [subscription-wide service
@@ -98,7 +98,7 @@ problem that **multi-subscription boundaries are meant to contain**.
 
 ### Identity and Conditional Access realities
 
-Desjardins' internal notes on private AKS / Entra sign-in behavior conclude that **IP allow-listing
+ACME Inc.'s internal notes on private AKS / Entra sign-in behavior conclude that **IP allow-listing
 is not a reliable architectural control** for AKS creation/authentication flows, and that the clean
 supported answer is [managed identity][aks-mi] / [workload identity][aks-wi] — not brittle
 source-IP assumptions ([Conditional Access network conditions][ca-network],

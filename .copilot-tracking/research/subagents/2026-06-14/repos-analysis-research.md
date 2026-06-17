@@ -25,9 +25,9 @@ aks-governance/
 │     └─ subagents/
 ├─ .git/
 ├─ assets/
-│  ├─ Desjardins_Gouvernance_Kubernetes_Rapport_FR.docx
-│  ├─ Desjardins_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx
-│  ├─ Desjardins_Kubernetes_Governance_Executive_Summary.pptx
+│  ├─ ACME_Gouvernance_Kubernetes_Rapport_FR.docx
+│  ├─ ACME_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx
+│  ├─ ACME_Kubernetes_Governance_Executive_Summary.pptx
 │  └─ Kubernetes Cluster Management Solutions.docx
 └─ README.md
 ```
@@ -35,16 +35,16 @@ aks-governance/
 ### Current state (key finding)
 
 - The repo is **documentation-only at present**. There is **NO** IaC (no bicep/terraform), **NO** pipelines (no `.github/workflows`, no `azure-pipelines*.yml`), and **NO** scripts. Only `README.md` plus four Office documents under `assets/`.
-- `assets/` contains client-facing deliverables (Desjardins Kubernetes governance):
-  - `Desjardins_Gouvernance_Kubernetes_Rapport_FR.docx` — full FR report
-  - `Desjardins_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx` — FR exec synthesis deck
-  - `Desjardins_Kubernetes_Governance_Executive_Summary.pptx` — EN exec summary deck
+- `assets/` contains client-facing deliverables (ACME Inc. Kubernetes governance):
+  - `ACME_Gouvernance_Kubernetes_Rapport_FR.docx` — full FR report
+  - `ACME_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx` — FR exec synthesis deck
+  - `ACME_Kubernetes_Governance_Executive_Summary.pptx` — EN exec summary deck
   - `Kubernetes Cluster Management Solutions.docx`
   - (No image/screenshot assets — these are binary Office files only.)
 
 ### README.md summary (aks-governance/README.md)
 
-The README is a prose executive brief titled "Desjardins Kubernetes governance report delivered." It is a narrative recommendation, **not** a phased implementation plan. Notable substance:
+The README is a prose executive brief titled "ACME Inc. Kubernetes governance report delivered." It is a narrative recommendation, **not** a phased implementation plan. Notable substance:
 
 - **Strategic recommendation**: move toward a **landing-zone-aligned multi-subscription ODS** (central governance/tooling in platform subs, workload clusters in client-aligned landing-zone subscriptions). Treat the single-subscription model only as a **tactical bootstrap pattern**.
 - **Two customer-proposed options** evaluated:

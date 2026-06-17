@@ -1,4 +1,4 @@
-# Gouvernance AKS — Architecture de gouvernance Kubernetes Desjardins
+# Gouvernance AKS — Architecture de gouvernance Kubernetes ACME Inc.
 
 > **Référence de gouvernance stratégique et preuve de concept exécutable** pour déployer et gouverner
 > Azure Kubernetes Service (AKS) — et, lorsque requis, Azure Red Hat OpenShift (ARO) — pour des
@@ -7,7 +7,7 @@
 
 🌐 **Langue :** [English](README.md) · **Français**
 
-📄 **Rapport associé :** `Desjardins_Kubernetes_Governance_Architecture_Report.docx`
+📄 **Rapport associé :** `ACME_Kubernetes_Governance_Architecture_Report.docx`
 
 ---
 
@@ -30,7 +30,7 @@
 ## Terminologie
 
 > [!NOTE]
-> **ODS** — *Offre de Service* : la capacité centrale de plateforme / libre-service de Desjardins
+> **ODS** — *Offre de Service* : la capacité centrale de plateforme / libre-service de ACME Inc.
 > qui provisionne et gouverne Kubernetes (AKS, et ARO lorsque requis) pour le compte des clients
 > internes. Dans ce document, « ODS » désigne cette équipe plateforme centrale et son automatisation
 > de déploiement — par exemple, l'entité à qui sont accordés des droits restreints pour déployer
@@ -55,10 +55,10 @@
 > **Recommandation stratégique :** évoluer vers un **ODS multi-abonnements aligné sur les zones
 > d'atterrissage** (gouvernance/outillage centralisés, avec les clusters de charge de travail dans
 > des [abonnements de zone d'atterrissage alignés sur le client][caf-lz]), et ne traiter le **modèle
-> à abonnement unique que comme un patron tactique d'amorçage** si Desjardins a besoin d'un chemin
+> à abonnement unique que comme un patron tactique d'amorçage** si ACME Inc. a besoin d'un chemin
 > court pour contourner les frictions actuelles de réseau inter-abonnements / GIA.
 
-Cette recommandation s'appuie sur les objectifs ODS de Desjardins : simplifier la consommation
+Cette recommandation s'appuie sur les objectifs ODS de ACME Inc. : simplifier la consommation
 d'AKS/ARO, centraliser l'observabilité/la gouvernance, prendre en charge les paliers de service
 orientés client et mutualisés, privilégier AKS par défaut, et n'utiliser ARO que pour des classes de
 charges spécifiques telles que CP4D et MQ. Elle est aussi cohérente avec les [recommandations
@@ -73,7 +73,7 @@ connectivité/sécurité dans des **abonnements de plateforme** et les charges d
 
 ### Moindre privilège / GIA
 
-Desjardins a explicitement demandé comment déployer AKS et ARO pour des clients internes avec le
+ACME Inc. a explicitement demandé comment déployer AKS et ARO pour des clients internes avec le
 **minimum de droits possible**, a signalé la famille de permissions problématique
 `Microsoft.Authorization/*/Write`, et a demandé des zones d'atterrissage pré-provisionnées ainsi que
 des [rôles personnalisés][custom-roles]. Un modèle multi-abonnements aligné sur les zones
@@ -92,7 +92,7 @@ que la fondation de gouvernance se met en place.
 
 ### Pourquoi l'abonnement unique ne devrait pas être l'état final
 
-Ces mêmes notes signalent une **pression d'échelle et de frontières** — Desjardins évoque déjà
+Ces mêmes notes signalent une **pression d'échelle et de frontières** — ACME Inc. évoque déjà
 **130 à 140 clusters AKS** et le besoin de dimensionner les VNets pour de grands nombres de nœuds et
 de « prédire les limites Azure ». Ces limites sont réelles et bornées : un abonnement unique est
 plafonné (par exemple, [**5 000 clusters AKS par abonnement** et **5 000 nœuds par cluster**][aks-quotas]),

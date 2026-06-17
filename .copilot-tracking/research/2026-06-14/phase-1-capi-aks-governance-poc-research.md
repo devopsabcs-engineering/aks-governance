@@ -114,7 +114,7 @@ A customer-demoable Phase 1 Proof of Concept, built inside the `aks-governance` 
 ### File Analysis
 
 * aks-governance/README.md
-  * Prose executive brief ("Desjardins Kubernetes governance report delivered"); strategic recommendation toward a landing-zone-aligned multi-subscription ODS, with single-subscription as a tactical bootstrap. No numbered phases/roadmap. Documents AKS=`managedClusters` vs ARO/Arc=`connectedClusters` policy asymmetry; ArgoCD = GitOps reconciler, CAPZ/ASO = declarative AKS lifecycle; adds a "Fleet-governed distributed AKS operations" pattern.
+  * Prose executive brief ("ACME Inc. Kubernetes governance report delivered"); strategic recommendation toward a landing-zone-aligned multi-subscription ODS, with single-subscription as a tactical bootstrap. No numbered phases/roadmap. Documents AKS=`managedClusters` vs ARO/Arc=`connectedClusters` policy asymmetry; ArgoCD = GitOps reconciler, CAPZ/ASO = declarative AKS lifecycle; adds a "Fleet-governed distributed AKS operations" pattern.
 * aks-governance/ (tree)
   * Documentation-only: `README.md` + four binary Office deliverables under `assets/`. No IaC, no pipelines, no scripts, no YAML. Phase 1 must be authored fresh.
 * aks-fleet-manager/.github/workflows/fleet-poc-demo.yml

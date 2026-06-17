@@ -16,7 +16,7 @@ ms.topic: research
 ## Workspace Evidence
 
 * `README.md` supports the strategic context: single subscription is only a tactical bootstrap, multi-subscription ODS is the recommended end state, AKS and ARO governance are asymmetric, and AKS uses Argo CD plus CAPZ/ASO for GitOps and declarative lifecycle.
-* `assets/` contains four binary Office deliverables and no directly readable implementation assets: `Desjardins_Gouvernance_Kubernetes_Rapport_FR.docx`, `Desjardins_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx`, `Desjardins_Kubernetes_Governance_Executive_Summary.pptx`, and `Kubernetes Cluster Management Solutions.docx`.
+* `assets/` contains four binary Office deliverables and no directly readable implementation assets: `ACME_Gouvernance_Kubernetes_Rapport_FR.docx`, `ACME_Gouvernance_Kubernetes_Synthese_Executive_FR.pptx`, `ACME_Kubernetes_Governance_Executive_Summary.pptx`, and `Kubernetes Cluster Management Solutions.docx`.
 * The target repo is otherwise greenfield for implementation: no `.github/workflows`, `infra`, `scripts`, `gitops`, Bicep, Terraform, or Kubernetes manifests were present in the initial workspace listing and supporting repo-analysis note.
 * The research document relies on sibling `aks-fleet-manager` patterns. That sibling evidence is captured in `repos-analysis-research.md`, not in the target workspace itself.
 
