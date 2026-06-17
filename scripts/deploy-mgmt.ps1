@@ -95,6 +95,38 @@ function Connect-AzFederated {
     }
 }
 
+# ---------------------------------------------------------------------------
+# Get-DeploymentFailureDetail — surface the ACTUAL Azure error for a failed deployment.
+# `az deployment group create` only reports the top-level provisioningState ('Failed'); the
+# real cause (e.g. AKSCapacityHeavyUsage, quota, SKU-not-available) lives on the individual
+# failed operations. Without this, a transient region-capacity error looks like a code break.
+# Returns a formatted multi-line string of '<code>: <message>' for each failed operation, or
+# $null when no detail could be read.
+# ---------------------------------------------------------------------------
+function Get-DeploymentFailureDetail {
+    param(
+        [Parameter(Mandatory)][string]$DeploymentName,
+        [Parameter(Mandatory)][string]$ResourceGroup
+    )
+    try {
+        $failuresJson = az deployment operation group list `
+            --name $DeploymentName `
+            --resource-group $ResourceGroup `
+            --query "[?properties.provisioningState=='Failed'].{code:properties.statusMessage.error.code, message:properties.statusMessage.error.message, resource:properties.targetResource.resourceType}" `
+            --output json 2>$null
+        if ([string]::IsNullOrWhiteSpace($failuresJson)) { return $null }
+        $failures = $failuresJson | ConvertFrom-Json
+        if (-not $failures) { return $null }
+        return ($failures | ForEach-Object {
+                $res = if ($_.resource) { " [$($_.resource)]" } else { '' }
+                "  - $($_.code)$res`: $($_.message)"
+            }) -join [Environment]::NewLine
+    }
+    catch {
+        return $null
+    }
+}
+
 # Resolve infra/mgmt-cluster.bicep relative to this script so the deploy works from any directory.
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $bicepPath = Join-Path $repoRoot 'infra/mgmt-cluster.bicep'
@@ -164,7 +196,17 @@ if ($ciFederated) {
         if ([string]::IsNullOrWhiteSpace($state)) { $state = 'Unknown' }
         Write-Host "    deployment '$deploymentName' state: $state"
     }
-    if ($state -ne 'Succeeded') { throw "Bicep deployment '$deploymentName' ended in state '$state'." }
+    if ($state -ne 'Succeeded') {
+        $detail = Get-DeploymentFailureDetail -DeploymentName $deploymentName -ResourceGroup $ResourceGroup
+        if ($detail) {
+            Write-Host '==> Azure reported the following deployment failure(s):' -ForegroundColor Red
+            Write-Host $detail -ForegroundColor Red
+            if ($detail -match 'AKSCapacityHeavyUsage') {
+                Write-Host "==> Hint: region '$Location' is at AKS capacity (transient, Azure-side). Re-run with a different -Location (e.g. eastus, centralus, westus3). See https://aka.ms/akscapacityheavyusage." -ForegroundColor Yellow
+            }
+        }
+        throw "Bicep deployment '$deploymentName' ended in state '$state'."
+    }
 }
 else {
     az deployment group create `
@@ -173,7 +215,17 @@ else {
         --template-file $bicepPath `
         --parameters $deployParams `
         --only-show-errors
-    if ($LASTEXITCODE -ne 0) { throw "Bicep deployment '$deploymentName' to '$ResourceGroup' failed." }
+    if ($LASTEXITCODE -ne 0) {
+        $detail = Get-DeploymentFailureDetail -DeploymentName $deploymentName -ResourceGroup $ResourceGroup
+        if ($detail) {
+            Write-Host '==> Azure reported the following deployment failure(s):' -ForegroundColor Red
+            Write-Host $detail -ForegroundColor Red
+            if ($detail -match 'AKSCapacityHeavyUsage') {
+                Write-Host "==> Hint: region '$Location' is at AKS capacity (transient, Azure-side). Re-run with a different -Location (e.g. eastus, centralus, westus3). See https://aka.ms/akscapacityheavyusage." -ForegroundColor Yellow
+            }
+        }
+        throw "Bicep deployment '$deploymentName' to '$ResourceGroup' failed."
+    }
 }
 
 Write-Host '==> Capturing deployment outputs...' -ForegroundColor Cyan
